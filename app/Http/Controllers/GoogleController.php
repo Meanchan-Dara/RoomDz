@@ -12,7 +12,7 @@ class GoogleController extends Controller
 {
     public function register(Request $request)
     {
-            $request->validate([
+        $request->validate([
             'name' => 'required',
             'email' => 'required|email|unique:users',
             'password' => 'required|min:6',
@@ -32,13 +32,13 @@ class GoogleController extends Controller
             'user' => $user
         ]);
     }
-        public function redirect()
-{
-    return Socialite::driver('google')->stateless()->redirect();
-}
-      public function callback(Request $request)
+    public function redirect()
     {
-        $token = $request->input('token'); 
+        return Socialite::driver('google')->stateless()->redirect();
+    }
+    public function callback(Request $request)
+    {
+        $token = $request->input('token');
         try {
             $googleUser = Socialite::driver('google')->stateless()->userFromToken($token);
 
@@ -68,5 +68,5 @@ class GoogleController extends Controller
             ], 500);
         }
     }
-    
+
 }
