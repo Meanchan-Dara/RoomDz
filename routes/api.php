@@ -1,10 +1,13 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\OtpCodeController;
 use App\Http\Controllers\ResetOTPController;
 use App\Http\Controllers\ResetPasswordController;
+use App\Http\Controllers\RoomController;
+use App\Http\Controllers\RoomDetailController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -12,11 +15,6 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
 */
 Route::get('/health', function () {
     return response()->json([
@@ -52,34 +50,21 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 // Rooms & Room Details
-Route::get('/room', [\App\Http\Controllers\RoomController::class, 'index']);
-Route::get('/rooms', [\App\Http\Controllers\RoomController::class, 'index']);
-Route::get('/room/{id}', [\App\Http\Controllers\RoomController::class, 'show']);
-Route::get('/rooms/{id}', [\App\Http\Controllers\RoomController::class, 'show']);
-Route::post('/room', [\App\Http\Controllers\RoomController::class, 'store']);
-Route::post('/rooms', [\App\Http\Controllers\RoomController::class, 'store']);
-Route::put('/room/{id}', [\App\Http\Controllers\RoomController::class, 'update']);
-Route::put('/rooms/{id}', [\App\Http\Controllers\RoomController::class, 'update']);
-Route::delete('/room/{id}', [\App\Http\Controllers\RoomController::class, 'destroy']);
-Route::delete('/rooms/{id}', [\App\Http\Controllers\RoomController::class, 'destroy']);
+Route::get('/room', [RoomController::class, 'index']);
+Route::get('/room/{id}', [RoomController::class, 'show']);
+Route::post('/room', [RoomController::class, 'store']);
+Route::put('/room/{id}', [RoomController::class, 'update']);
+Route::delete('/room/{id}', [RoomController::class, 'destroy']);
 
 // Room Detail & Viewing Request
-Route::get('/room-detail/{id}', [\App\Http\Controllers\RoomDetailController::class, 'show']);
-Route::get('/room-details/{id}', [\App\Http\Controllers\RoomDetailController::class, 'show']);
-Route::put('/room-detail/{id}', [\App\Http\Controllers\RoomDetailController::class, 'update']);
-Route::put('/room-details/{id}', [\App\Http\Controllers\RoomDetailController::class, 'update']);
-Route::post('/room/{id}/request-viewing', [\App\Http\Controllers\RoomController::class, 'requestViewing']);
-Route::post('/rooms/{id}/request-viewing', [\App\Http\Controllers\RoomController::class, 'requestViewing']);
+Route::get('/room-detail/{id}', [RoomDetailController::class, 'show']);
+Route::put('/room-detail/{id}', [RoomDetailController::class, 'update']);
+Route::post('/room/{id}/request-viewing', [RoomController::class, 'requestViewing']);
 
 // Categories
-Route::get('/category', [\App\Http\Controllers\CategoryController::class, 'index']);
-Route::get('/categories', [\App\Http\Controllers\CategoryController::class, 'index']);
-Route::get('/category/{id}', [\App\Http\Controllers\CategoryController::class, 'show']);
-Route::get('/categories/{id}', [\App\Http\Controllers\CategoryController::class, 'show']);
-Route::post('/category', [\App\Http\Controllers\CategoryController::class, 'store']);
-Route::post('/categories', [\App\Http\Controllers\CategoryController::class, 'store']);
-Route::put('/category/{id}', [\App\Http\Controllers\CategoryController::class, 'update']);
-Route::put('/categories/{id}', [\App\Http\Controllers\CategoryController::class, 'update']);
-Route::delete('/category/{id}', [\App\Http\Controllers\CategoryController::class, 'destroy']);
-Route::delete('/categories/{id}', [\App\Http\Controllers\CategoryController::class, 'destroy']);
+Route::get('/category', [CategoryController::class, 'index']);
+Route::get('/category/{id}', [CategoryController::class, 'show']);
+Route::post('/category', [CategoryController::class, 'store']);
+Route::put('/category/{id}', [CategoryController::class, 'update']);
+Route::delete('/category/{id}', [CategoryController::class, 'destroy']);
 
