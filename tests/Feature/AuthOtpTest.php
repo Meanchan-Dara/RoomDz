@@ -18,6 +18,9 @@ class AuthOtpTest extends TestCase
     {
         parent::setUp();
         Mail::fake();
+        User::where('email', $this->testEmail)->delete();
+        OtpCode::where('email', $this->testEmail)->delete();
+        DB::table('password_reset_tokens')->where('email', $this->testEmail)->delete();
     }
 
     public function test_1_register(): void
@@ -103,6 +106,11 @@ class AuthOtpTest extends TestCase
 
     public function test_6_reset_otp(): void
     {
+        User::firstOrCreate(
+            ['email' => $this->testEmail],
+            ['name' => 'Meanchan Dara', 'password' => bcrypt($this->testPassword)]
+        );
+
         // Expired OTP first
         OtpCode::updateOrCreate(
             ['email' => $this->testEmail],
@@ -119,6 +127,11 @@ class AuthOtpTest extends TestCase
 
     public function test_7_forgot_password(): void
     {
+        User::firstOrCreate(
+            ['email' => $this->testEmail],
+            ['name' => 'Meanchan Dara', 'password' => bcrypt($this->testPassword)]
+        );
+
         $response = $this->postJson('/api/forgot-password', [
             'email' => $this->testEmail,
         ]);

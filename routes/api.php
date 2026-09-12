@@ -8,6 +8,7 @@ use App\Http\Controllers\ResetOTPController;
 use App\Http\Controllers\ResetPasswordController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomDetailController;
+use App\Http\Controllers\RoleController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -49,22 +50,27 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-// Rooms & Room Details
+// Room
 Route::get('/room', [RoomController::class, 'index']);
 Route::get('/room/{id}', [RoomController::class, 'show']);
 Route::post('/room', [RoomController::class, 'store']);
 Route::put('/room/{id}', [RoomController::class, 'update']);
 Route::delete('/room/{id}', [RoomController::class, 'destroy']);
-
-// Room Detail & Viewing Request
-Route::get('/room-detail/{id}', [RoomDetailController::class, 'show']);
-Route::put('/room-detail/{id}', [RoomDetailController::class, 'update']);
 Route::post('/room/{id}/request-viewing', [RoomController::class, 'requestViewing']);
 
-// Categories
+// Room Detail
+Route::get('/room-details/{id}', [RoomDetailController::class, 'show']);
+Route::put('/room-details/{id}', [RoomDetailController::class, 'update']);
+Route::get('/room-detail/{id}', [RoomDetailController::class, 'show']);
+Route::put('/room-detail/{id}', [RoomDetailController::class, 'update']);
+
+// Category
 Route::get('/category', [CategoryController::class, 'index']);
 Route::get('/category/{id}', [CategoryController::class, 'show']);
 Route::post('/category', [CategoryController::class, 'store']);
 Route::put('/category/{id}', [CategoryController::class, 'update']);
 Route::delete('/category/{id}', [CategoryController::class, 'destroy']);
+
+// Roles
+Route::get('/roles', [RoleController::class, 'index']);
 

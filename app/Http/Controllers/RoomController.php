@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class RoomController extends Controller
@@ -44,7 +45,7 @@ class RoomController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Room::with('category');
+        $query = Room::with(['category', 'user']);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -99,6 +100,7 @@ class RoomController extends Controller
     {
         $validated = $request->validate([
             'category_id' => 'nullable|integer|exists:categories,id',
+            'user_id' => 'nullable|integer|exists:users,id',
             'name' => 'required|string|max:255',
             'type' => 'nullable|string|max:100',
             'price' => 'required|numeric|min:0',
@@ -149,32 +151,39 @@ class RoomController extends Controller
             $galleryUrls = [$mainImageUrl];
         }
 
-        $room = Room::create([
-            'category_id' => $validated['category_id'] ?? null,
-            'name' => $validated['name'],
-            'type' => $validated['type'] ?? 'Private Room',
-            'price' => $validated['price'],
-            'price_period' => $validated['price_period'] ?? 'month',
-            'status' => $validated['status'] ?? 'AVAILABLE NOW',
-            'rating' => $validated['rating'] ?? 5.0,
-            'reviews_count' => $validated['reviews_count'] ?? 0,
-            'address' => $validated['address'],
-            'image' => $mainImageUrl,
-        ]);
+        $userId = $request->user('sanctum')?->id ?? $request->user()?->id ?? ($validated['user_id'] ?? null);
 
-        $room->detail()->create([
-            'description' => $validated['description'] ?? null,
-            'size' => $validated['size'] ?? null,
-            'floor' => $validated['floor'] ?? null,
-            'deposit' => $validated['deposit'] ?? null,
-            'images' => $galleryUrls,
-            'facilities' => $validated['facilities'] ?? [],
-            'house_rules' => $validated['house_rules'] ?? [],
-            'latitude' => $validated['latitude'] ?? null,
-            'longitude' => $validated['longitude'] ?? null,
-        ]);
+        $room = DB::transaction(function () use ($validated, $userId, $mainImageUrl, $galleryUrls) {
+            $room = Room::create([
+                'category_id' => $validated['category_id'] ?? null,
+                'user_id' => $userId,
+                'name' => $validated['name'],
+                'type' => $validated['type'] ?? 'Private Room',
+                'price' => $validated['price'],
+                'price_period' => $validated['price_period'] ?? 'month',
+                'status' => $validated['status'] ?? 'AVAILABLE NOW',
+                'rating' => $validated['rating'] ?? 5.0,
+                'reviews_count' => $validated['reviews_count'] ?? 0,
+                'address' => $validated['address'],
+                'image' => $mainImageUrl,
+            ]);
 
-        $room->load(['detail', 'category']);
+            $room->detail()->create([
+                'description' => $validated['description'] ?? null,
+                'size' => $validated['size'] ?? null,
+                'floor' => $validated['floor'] ?? null,
+                'deposit' => $validated['deposit'] ?? null,
+                'images' => $galleryUrls,
+                'facilities' => $validated['facilities'] ?? [],
+                'house_rules' => $validated['house_rules'] ?? [],
+                'latitude' => $validated['latitude'] ?? null,
+                'longitude' => $validated['longitude'] ?? null,
+            ]);
+
+            return $room;
+        });
+
+        $room->load(['detail', 'category', 'user']);
 
         return (new RoomDetailResource($room))
             ->response()
@@ -186,7 +195,7 @@ class RoomController extends Controller
      */
     public function show(string $id): RoomDetailResource
     {
-        $room = Room::with(['detail', 'category'])->findOrFail($id);
+        $room = Room::with(['detail', 'category', 'user'])->findOrFail($id);
 
         return new RoomDetailResource($room);
     }
@@ -196,10 +205,11 @@ class RoomController extends Controller
      */
     public function update(Request $request, string $id): RoomDetailResource
     {
-        $room = Room::with(['detail', 'category'])->findOrFail($id);
+        $room = Room::with(['detail', 'category', 'user'])->findOrFail($id);
 
         $validated = $request->validate([
             'category_id' => 'nullable|integer|exists:categories,id',
+            'user_id' => 'nullable|integer|exists:users,id',
             'name' => 'sometimes|required|string|max:255',
             'type' => 'nullable|string|max:100',
             'price' => 'sometimes|required|numeric|min:0',
@@ -244,39 +254,42 @@ class RoomController extends Controller
             $galleryUrls = $validated['images'];
         }
 
-        $room->update(array_filter([
-            'category_id' => array_key_exists('category_id', $validated) ? $validated['category_id'] : $room->category_id,
-            'name' => $validated['name'] ?? null,
-            'type' => $validated['type'] ?? null,
-            'price' => $validated['price'] ?? null,
-            'price_period' => $validated['price_period'] ?? null,
-            'status' => $validated['status'] ?? null,
-            'rating' => $validated['rating'] ?? null,
-            'reviews_count' => $validated['reviews_count'] ?? null,
-            'address' => $validated['address'] ?? null,
-            'image' => $mainImageUrl,
-        ], fn ($val) => !is_null($val)));
+        DB::transaction(function () use ($room, $validated, $mainImageUrl, $galleryUrls) {
+            $room->update(array_filter([
+                'category_id' => array_key_exists('category_id', $validated) ? $validated['category_id'] : $room->category_id,
+                'user_id' => array_key_exists('user_id', $validated) ? $validated['user_id'] : $room->user_id,
+                'name' => $validated['name'] ?? null,
+                'type' => $validated['type'] ?? null,
+                'price' => $validated['price'] ?? null,
+                'price_period' => $validated['price_period'] ?? null,
+                'status' => $validated['status'] ?? null,
+                'rating' => $validated['rating'] ?? null,
+                'reviews_count' => $validated['reviews_count'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'image' => $mainImageUrl,
+            ], fn ($val) => !is_null($val)));
 
-        $detailData = array_filter([
-            'description' => $validated['description'] ?? null,
-            'size' => $validated['size'] ?? null,
-            'floor' => $validated['floor'] ?? null,
-            'deposit' => $validated['deposit'] ?? null,
-            'images' => $galleryUrls,
-            'facilities' => $validated['facilities'] ?? null,
-            'house_rules' => $validated['house_rules'] ?? null,
-            'latitude' => $validated['latitude'] ?? null,
-            'longitude' => $validated['longitude'] ?? null,
-        ], fn ($val) => !is_null($val));
+            $detailData = array_filter([
+                'description' => $validated['description'] ?? null,
+                'size' => $validated['size'] ?? null,
+                'floor' => $validated['floor'] ?? null,
+                'deposit' => $validated['deposit'] ?? null,
+                'images' => $galleryUrls,
+                'facilities' => $validated['facilities'] ?? null,
+                'house_rules' => $validated['house_rules'] ?? null,
+                'latitude' => $validated['latitude'] ?? null,
+                'longitude' => $validated['longitude'] ?? null,
+            ], fn ($val) => !is_null($val));
 
-        if (!empty($detailData)) {
-            $room->detail()->updateOrCreate(
-                ['room_id' => $room->id],
-                $detailData
-            );
-        }
+            if (!empty($detailData)) {
+                $room->detail()->updateOrCreate(
+                    ['room_id' => $room->id],
+                    $detailData
+                );
+            }
+        });
 
-        $room->load(['detail', 'category']);
+        $room->load(['detail', 'category', 'user']);
 
         return new RoomDetailResource($room);
     }
@@ -312,7 +325,7 @@ class RoomController extends Controller
 
         $viewingRequest = ViewingRequest::create([
             'room_id' => $room->id,
-            'user_id' => $request->user()?->id,
+            'user_id' => $request->user('sanctum')?->id ?? $request->user()?->id,
             'name' => $validated['name'],
             'phone' => $validated['phone'],
             'email' => $validated['email'] ?? null,

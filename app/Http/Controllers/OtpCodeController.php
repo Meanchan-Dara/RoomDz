@@ -6,7 +6,7 @@ use App\Mail\OtpMail;
 use App\Models\OtpCode;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Mail;
+use Illuminate\Support\Facades\Mail;
 
 class OtpCodeController extends Controller
 {
@@ -63,7 +63,13 @@ class OtpCodeController extends Controller
         );
 
         // Dispatch the email using the SMTP configuration
-        Mail::to($request->email)->send(new OtpMail($otp));
+        try {
+            Mail::to($request->email)->send(new OtpMail($otp));
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Failed to send OTP email: ' . $e->getMessage()
+            ], 500);
+        }
 
         return response()->json([
             'message' => 'OTP has been sent successfully to ' . $request->email

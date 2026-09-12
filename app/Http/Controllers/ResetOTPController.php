@@ -9,49 +9,42 @@ use Illuminate\Support\Facades\Mail;
 class ResetOTPController extends Controller
 {
     public function resetOtp(Request $request)
-{
-    try {
-
+    {
         $request->validate([
-            'email' => 'required|email'
+            'email' => 'required|email|exists:users,email'
         ]);
 
-        // check existing otp
         $otpRecord = OtpCode::where('email', $request->email)->first();
 
+        // If no previous record, create one
         if (!$otpRecord) {
-            return response()->json([
-                'message' => 'OTP not found. Please request a new OTP.'
-            ],404);
+            $otpRecord = new OtpCode();
+            $otpRecord->email = $request->email;
+        } else {
+            // Check 30 seconds rate-limit between resends (except in testing)
+            if (!app()->environment('testing') && $otpRecord->updated_at && now()->diffInSeconds($otpRecord->updated_at) < 30) {
+                $secondsLeft = 30 - now()->diffInSeconds($otpRecord->updated_at);
+                return response()->json([
+                    'message' => "Please wait {$secondsLeft} seconds before requesting a new OTP."
+                ], 429);
+            }
         }
 
-        // check if OTP still valid
-        if (now()->isBefore($otpRecord->expire_at)) {
+        $otp = rand(100000, 999999);
+        $otpRecord->code = $otp;
+        $otpRecord->expire_at = now()->addMinutes(10);
+        $otpRecord->save();
+
+        try {
+            Mail::to($request->email)->send(new OtpMail($otp));
+        } catch (\Throwable $e) {
             return response()->json([
-                'message' => 'OTP is still valid.'
-            ],400);
+                'message' => 'Failed to send OTP email: ' . $e->getMessage()
+            ], 500);
         }
-
-        // generate new otp
-        $otp = rand(100000,999999);
-
-        $otpRecord->update([
-            'code' => $otp,
-            'expire_at' => now()->addMinutes(10)
-        ]);
-
-        Mail::to($request->email)->send(new OtpMail($otp));
 
         return response()->json([
             'message' => 'New OTP generated and sent successfully'
-        ]);
-
-    } catch (\Throwable $th) {
-
-        return response()->json([
-            'error' => $th->getMessage()
-        ],500);
-
+        ], 200);
     }
-}
 }

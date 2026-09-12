@@ -34,37 +34,49 @@ class GoogleController extends Controller
     }
     public function redirect()
     {
-        return Socialite::driver('google')->stateless()->redirect();
+        /** @var \Laravel\Socialite\Two\GoogleProvider $driver */
+        $driver = Socialite::driver('google');
+        return $driver->stateless()->redirect();
     }
     public function callback(Request $request)
     {
-        $token = $request->input('token');
         try {
-            $googleUser = Socialite::driver('google')->stateless()->userFromToken($token);
+            $token = $request->input('token');
+
+            /** @var \Laravel\Socialite\Two\GoogleProvider $driver */
+            $driver = Socialite::driver('google');
+
+            if (!empty($token)) {
+                $googleUser = $driver->stateless()->userFromToken($token);
+            } else {
+                $googleUser = $driver->stateless()->user();
+            }
 
             $user = User::updateOrCreate(
                 ['email' => $googleUser->getEmail()],
                 [
                     'name' => $googleUser->getName(),
                     'google_id' => $googleUser->getId(),
-                    'role' => 1,
-                    'password' => bcrypt(Str::random(16)),
+                    'avatar' => $googleUser->getAvatar(),
+                    'role' => 'customer',
+                    'password' => Hash::make(Str::random(24)),
                 ]
             );
 
-            $token = $user->createToken('auth_token')->plainTextToken;
+            $authToken = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
                 'success' => true,
-                'token' => $token,
-                'user' => $user
-            ]);
+                'message' => 'Google authentication successful',
+                'token' => $authToken,
+                'user' => $user,
+            ], 200);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Google login failed',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

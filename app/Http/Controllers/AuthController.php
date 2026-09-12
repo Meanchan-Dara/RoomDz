@@ -11,79 +11,70 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        try {
-            $request->validate([
-                "name" => ["required"],
-                "email" => ["required", "email", "unique:users,email"],
-                "password" => ["required", "min:6"],
-            ]);
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'unique:users,email'],
+            'password' => ['required', 'min:6'],
+            'role' => ['nullable', 'string', 'in:admin,owner,customer'],
+            'phone' => ['nullable', 'string', 'max:50'],
+        ]);
 
-            $user = new User();
-            $user->name = $request["name"];
-            $user->email = $request["email"];
-            $user->password = Hash::make($request["password"]);
-            $user->save();
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'] ?? 'customer',
+            'phone' => $validated['phone'] ?? null,
+        ]);
 
-            return response()->json($user, 201);
-        } catch (\Throwable $th) {
-            return response()->json([
-                "message" => $th->getMessage()
-            ], 500);
-        }
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'User registered successfully',
+            'token' => $token,
+            'user' => $user,
+        ], 201);
     }
 
     public function login(Request $request)
     {
-        try {
-            $credentials = $request->validate([
-                "email" => ["required"],
-                "password" => ["required"],
-            ]);
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
 
-            if (!Auth::attempt($credentials)) {
-                return response()->json([
-                    "message" => "Invalid Password or Email",
-                ], 401);
-            }
-            $user = Auth::user();
-            $token = $user->createToken('device-name')->plainTextToken;
-
+        if (!Auth::attempt($credentials)) {
             return response()->json([
-                "token" => $token,
-                "user" => $user,
-            ], 200);
-        } catch (\Throwable $th) {
-            return response()->json([
-                "message" => $th->getMessage()
-            ], 500);
+                'message' => 'Invalid email or password',
+            ], 401);
         }
+
+        /** @var User $user */
+        $user = Auth::user();
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Login successful',
+            'token' => $token,
+            'user' => $user,
+        ], 200);
     }
 
     public function logout(Request $request)
     {
-        try {
-            $request->user()->currentAccessToken()->delete();
+        /** @var \Laravel\Sanctum\PersonalAccessToken|null $token */
+        $token = $request->user()?->currentAccessToken();
+        $token?->delete();
 
-            return response()->json([
-                "message" => "Logged out successfully"
-            ], 200);
-        } catch (\Throwable $th) {
-            return response()->json([
-                "message" => $th->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'message' => 'Logged out successfully',
+        ], 200);
     }
 
     public function profile(Request $request)
     {
-        try {
-            return response()->json([
-                "user" => $request->user()
-            ], 200);
-        } catch (\Throwable $th) {
-            return response()->json([
-                "message" => $th->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'user' => $request->user(),
+        ], 200);
     }
 }

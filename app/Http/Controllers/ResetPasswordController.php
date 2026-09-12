@@ -2,47 +2,73 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Mail;
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class ResetPasswordController extends Controller
 {
-
     // Forgot Password
     public function forgotPassword(Request $request)
     {
-        $token = Str::random(60);
+        $request->validate([
+            'email' => 'required|email|exists:users,email'
+        ]);
+
+        $token = Str::random(64);
 
         DB::table('password_reset_tokens')->updateOrInsert(
             ['email' => $request->email],
             ['token' => $token, 'created_at' => now()]
         );
 
-        $link = url('/reset-password/'.$token);
+        $frontendUrl = env('FRONTEND_URL', config('app.url'));
+        $link = rtrim($frontendUrl, '/') . '/reset-password?token=' . $token . '&email=' . urlencode($request->email);
 
-        Mail::raw("Reset password: ".$link, function($message) use ($request) {
-            $message->to($request->email)
-                    ->subject('Reset Password');
-        });
+        try {
+            Mail::raw("You requested a password reset. Click the link below to set a new password:\n\n{$link}\n\nThis link will expire in 60 minutes.", function ($message) use ($request) {
+                $message->to($request->email)
+                        ->subject('Reset Password');
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Failed to send reset email: ' . $e->getMessage()
+            ], 500);
+        }
 
-        return response()->json([
-            'message' => 'Email sent',
-            'token' => $token,        
-            'reset_link' => $link    
-        ]);
+        $response = [
+            'message' => 'Password reset link sent successfully to your email.'
+        ];
+
+        // Only expose token in non-production environments for automated testing
+        if (app()->environment('local', 'testing')) {
+            $response['token'] = $token;
+            $response['reset_link'] = $link;
+        }
+
+        return response()->json($response, 200);
     }
 
     // Reset Password
-    public function resetPassword(Request $request, $token)
+    public function resetPassword(Request $request, string $token)
     {
+        $request->validate([
+            'password' => 'required|min:6'
+        ]);
+
         $reset = DB::table('password_reset_tokens')->where('token', $token)->first();
 
         if (!$reset) {
-            return response()->json(['message' => 'Invalid token'], 400);
+            return response()->json(['message' => 'Invalid or expired token'], 400);
+        }
+
+        // Check if token has expired (60 minutes)
+        if (now()->subMinutes(60)->isAfter($reset->created_at)) {
+            DB::table('password_reset_tokens')->where('token', $token)->delete();
+            return response()->json(['message' => 'Reset token has expired. Please request a new one.'], 400);
         }
 
         $user = User::where('email', $reset->email)->first();
@@ -50,12 +76,12 @@ class ResetPasswordController extends Controller
             return response()->json(['message' => 'User not found'], 404);
         }
 
-        $user->password = bcrypt($request->password);
+        $user->password = Hash::make($request->password);
         $user->save();
 
         DB::table('password_reset_tokens')->where('token', $token)->delete();
 
-        return response()->json(['message' => 'Password successfully reset']);
+        return response()->json(['message' => 'Password successfully reset'], 200);
     }
 
 

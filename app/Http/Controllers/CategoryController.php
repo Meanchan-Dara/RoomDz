@@ -66,9 +66,14 @@ class CategoryController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        if (empty($validated['slug'])) {
-            $validated['slug'] = Str::slug($validated['name']);
+        $baseSlug = !empty($validated['slug']) ? Str::slug($validated['slug']) : Str::slug($validated['name']);
+        $slug = $baseSlug;
+        $counter = 1;
+        while (Category::where('slug', $slug)->exists()) {
+            $slug = "{$baseSlug}-{$counter}";
+            $counter++;
         }
+        $validated['slug'] = $slug;
 
         $imageUrl = null;
         if ($request->hasFile('image')) {

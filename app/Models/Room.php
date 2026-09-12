@@ -14,6 +14,7 @@ class Room extends Model
 
     protected $fillable = [
         'category_id',
+        'user_id',
         'name',
         'type',
         'price',
@@ -27,6 +28,7 @@ class Room extends Model
 
     protected $casts = [
         'category_id' => 'integer',
+        'user_id' => 'integer',
         'price' => 'float',
         'rating' => 'float',
         'reviews_count' => 'integer',
@@ -35,6 +37,11 @@ class Room extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function detail(): HasOne

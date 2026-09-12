@@ -50,11 +50,19 @@ class RoomDetailResource extends JsonResource
         return [
             'id' => $this->id,
             'category_id' => $this->category_id,
+            'user_id' => $this->user_id,
             'category' => $this->category ? [
                 'id' => $this->category->id,
                 'name' => $this->category->name,
                 'slug' => $this->category->slug,
-                'image' => $this->category->image,
+                'image' => $formatUrl($this->category->image),
+            ] : null,
+            'landlord' => $this->relationLoaded('user') && $this->user ? [
+                'id' => $this->user->id,
+                'name' => $this->user->name,
+                'email' => $this->user->email,
+                'phone' => $this->user->phone,
+                'avatar' => $formatUrl($this->user->avatar),
             ] : null,
             'name' => $this->name,
             'status' => $this->status ?? 'AVAILABLE NOW',
