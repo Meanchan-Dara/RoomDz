@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -52,13 +53,15 @@ class GoogleController extends Controller
                 $googleUser = $driver->stateless()->user();
             }
 
+            $customerRole = role::where('name', 'customer')->first();
+
             $user = User::updateOrCreate(
                 ['email' => $googleUser->getEmail()],
                 [
                     'name' => $googleUser->getName(),
                     'google_id' => $googleUser->getId(),
                     'avatar' => $googleUser->getAvatar(),
-                    'role' => 'customer',
+                    'role_id' => $customerRole?->id,
                     'password' => Hash::make(Str::random(24)),
                 ]
             );

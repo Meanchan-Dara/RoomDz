@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Room;
 use App\Models\User;
+use App\Models\role;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
@@ -41,11 +42,12 @@ class RoomCategoryTest extends TestCase
     public function test_room_atomic_creation_with_landlord_and_details(): void
     {
         // 1. Create a landlord user
+        $ownerRole = role::firstOrCreate(['name' => 'owner'], ['description' => 'Property or room owner']);
         $landlord = User::create([
             'name' => 'Test Landlord',
             'email' => 'landlord_' . uniqid() . '@example.com',
             'password' => bcrypt('secret123'),
-            'role' => 'owner',
+            'role_id' => $ownerRole->id,
             'phone' => '+85512345678',
         ]);
 

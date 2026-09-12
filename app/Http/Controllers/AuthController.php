@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\role;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 
@@ -16,16 +17,26 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'min:6'],
             'role' => ['nullable', 'string', 'in:admin,owner,customer'],
+            'role_id' => ['nullable', 'exists:roles,id'],
             'phone' => ['nullable', 'string', 'max:50'],
         ]);
 
+        $roleId = $validated['role_id'] ?? null;
+        if (!$roleId) {
+            $roleName = $validated['role'] ?? 'customer';
+            $roleObj = role::where('name', $roleName)->first();
+            $roleId = $roleObj?->id;
+        }
+
         $user = User::create([
+            'role_id' => $roleId,
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role'] ?? 'customer',
             'phone' => $validated['phone'] ?? null,
         ]);
+
+        $user->load('role');
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -51,6 +62,7 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = Auth::user();
+        $user->load('role');
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
@@ -62,9 +74,13 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        /** @var \Laravel\Sanctum\PersonalAccessToken|null $token */
-        $token = $request->user()?->currentAccessToken();
-        $token?->delete();
+        $user = $request->user();
+        if ($user) {
+            $token = $user->currentAccessToken();
+            if ($token && method_exists($token, 'delete')) {
+                $token->delete();
+            }
+        }
 
         return response()->json([
             'message' => 'Logged out successfully',
@@ -74,7 +90,7 @@ class AuthController extends Controller
     public function profile(Request $request)
     {
         return response()->json([
-            'user' => $request->user(),
+            'user' => $request->user()->load('role'),
         ], 200);
     }
 }

@@ -6,7 +6,9 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -19,10 +21,10 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
+        'role_id',
         'name',
         'email',
         'password',
-        'role',
         'phone',
         'avatar',
         'google_id',
@@ -48,6 +50,14 @@ class User extends Authenticatable
     ];
 
     /**
+     * Get the role associated with the user.
+     */
+    public function role(): BelongsTo
+    {
+        return $this->belongsTo(role::class);
+    }
+
+    /**
      * Get all rooms owned by this user/landlord.
      */
     public function rooms(): HasMany
@@ -61,5 +71,21 @@ class User extends Authenticatable
     public function viewingRequests(): HasMany
     {
         return $this->hasMany(ViewingRequest::class);
+    }
+
+    /**
+     * Get all favorite records for this user.
+     */
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(Favorite::class);
+    }
+
+    /**
+     * Get all rooms favorited by this user directly.
+     */
+    public function favoriteRooms(): BelongsToMany
+    {
+        return $this->belongsToMany(Room::class, 'favorites')->withTimestamps();
     }
 }
