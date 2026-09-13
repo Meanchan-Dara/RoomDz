@@ -16,7 +16,7 @@ class RoomDetailController extends Controller
     public function show(string $id): RoomDetailResource
     {
         // Try finding by room_id first, or by room_details.id
-        $room = Room::with('detail')
+        $room = Room::with(['detail', 'user', 'category'])
             ->where('id', $id)
             ->orWhereHas('detail', function ($query) use ($id) {
                 $query->where('id', $id);
@@ -56,7 +56,7 @@ class RoomDetailController extends Controller
             $validated
         );
 
-        $room->load('detail');
+        $room->load(['detail', 'user', 'category']);
 
         return new RoomDetailResource($room);
     }

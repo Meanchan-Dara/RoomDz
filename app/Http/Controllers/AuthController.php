@@ -137,6 +137,7 @@ class AuthController extends Controller
                 'google_id' => $user->google_id,
                 'is_verified' => (bool) $user->is_verified,
                 'location_tag' => $user->location_tag,
+                'telegram' => $user->telegram,
                 'email_verified_at' => $user->email_verified_at?->toISOString(),
                 'role' => $user->role ? [
                     'id' => $user->role->id,
@@ -166,6 +167,7 @@ class AuthController extends Controller
             'email' => ['sometimes', 'required', 'email', 'unique:users,email,' . $user->id],
             'phone' => ['nullable', 'string', 'max:50'],
             'location_tag' => ['nullable', 'string', 'max:255'],
+            'telegram' => ['nullable', 'string', 'max:100'],
             'avatar' => ['nullable'],
             'password' => ['nullable', 'min:6'],
         ]);
@@ -208,6 +210,7 @@ class AuthController extends Controller
                 'google_id' => $user->google_id,
                 'is_verified' => (bool) $user->is_verified,
                 'location_tag' => $user->location_tag,
+                'telegram' => $user->telegram,
                 'email_verified_at' => $user->email_verified_at?->toISOString(),
                 'role' => $user->role ? [
                     'id' => $user->role->id,

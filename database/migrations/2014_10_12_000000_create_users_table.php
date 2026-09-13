@@ -19,6 +19,9 @@ return new class extends Migration
             $table->string('phone')->nullable();
             $table->string('avatar')->nullable();
             $table->string('google_id')->nullable()->index();
+            $table->boolean('is_verified')->default(false);
+            $table->string('location_tag')->nullable();
+            $table->string('telegram')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();

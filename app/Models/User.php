@@ -30,6 +30,7 @@ class User extends Authenticatable
         'google_id',
         'is_verified',
         'location_tag',
+        'telegram',
     ];
 
     /**

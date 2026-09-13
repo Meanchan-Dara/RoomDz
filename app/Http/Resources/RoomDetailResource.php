@@ -72,6 +72,7 @@ class RoomDetailResource extends JsonResource
                 'avatar' => $formatUrl($this->user->avatar),
                 'is_verified' => (bool) $this->user->is_verified,
                 'location_tag' => $this->user->location_tag,
+                'telegram' => $this->user->telegram,
             ] : null,
             'name' => $this->name,
             'type' => $this->type ?? 'Private Room',
@@ -115,10 +116,15 @@ class RoomDetailResource extends JsonResource
             'required_documents' => $detail?->required_documents ?? [],
             'payment_methods' => $detail?->payment_methods ?? ['KHQR / Bakong', 'Cash'],
             'payment_cycle' => $detail?->payment_cycle ?? '1-5 of each month',
-            'contact_info' => $detail?->contact_info ?? ($this->relationLoaded('user') && $this->user ? [
+            'contact_info' => $detail?->contact_info ? array_merge(
+                $detail->contact_info,
+                empty($detail->contact_info['telegram']) && $this->relationLoaded('user') && $this->user?->telegram
+                    ? ['telegram' => $this->user->telegram]
+                    : []
+            ) : ($this->relationLoaded('user') && $this->user ? [
                 'contact_name' => $this->user->name,
                 'phone' => $this->user->phone,
-                'telegram' => null,
+                'telegram' => $this->user->telegram,
                 'preferred_contact' => 'Telegram',
             ] : null),
             'location' => [

@@ -16,11 +16,26 @@ class RoomSeeder extends Seeder
         $privateRoomCat = \App\Models\Category::where('slug', 'private-room')->first();
         $studioCat = \App\Models\Category::where('slug', 'studio-apartment')->first();
 
+        $ownerRole = \App\Models\role::where('name', 'owner')->first();
+        $owner = \App\Models\User::firstOrCreate(
+            ['email' => 'owner@roomdz.com'],
+            [
+                'role_id' => $ownerRole?->id,
+                'name' => 'Meanchan Dara (Owner)',
+                'password' => bcrypt('password123'),
+                'phone' => '+855 12 345 678',
+                'telegram' => '@roomdz_contact',
+                'is_verified' => true,
+                'location_tag' => 'Phnom Penh, Cambodia',
+            ]
+        );
+
         // 1. Exact Room from the design screenshot
         $room1 = Room::updateOrCreate(
             ['name' => 'Modern Private Room', 'address' => 'Toul Kork, Phnom Penh'],
             [
                 'category_id' => $privateRoomCat?->id,
+                'user_id' => $owner->id,
                 'type' => 'Private Room',
                 'price' => 150.00,
                 'price_period' => 'month',
@@ -69,6 +84,7 @@ class RoomSeeder extends Seeder
             ['name' => 'Cozy Studio Apartment', 'address' => 'BKK1, Phnom Penh'],
             [
                 'category_id' => $studioCat?->id,
+                'user_id' => $owner->id,
                 'type' => 'Studio',
                 'price' => 220.00,
                 'price_period' => 'month',

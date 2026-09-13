@@ -61,6 +61,15 @@ class AllEndpointsTest extends TestCase
         $this->assertEquals($regEmail, $profile->json('user.email'));
         echo "\n[PASS] GET /api/profile -> 200";
 
+        // 5b. Update Profile with Telegram
+        $updateProf = $this->withHeader('Authorization', "Bearer {$authToken}")
+            ->putJson('/api/profile', [
+                'telegram' => '@ocean_owner_kh',
+            ]);
+        $updateProf->assertStatus(200);
+        $this->assertEquals('@ocean_owner_kh', $updateProf->json('user.telegram'));
+        echo "\n[PASS] PUT /api/profile (telegram updated) -> 200";
+
         // 6. Auth User
         $userResp = $this->withHeader('Authorization', "Bearer {$authToken}")
             ->getJson('/api/user');
@@ -122,7 +131,8 @@ class AllEndpointsTest extends TestCase
         // 13. Room Show
         $roomShow = $this->getJson("/api/room/{$roomId}");
         $roomShow->assertStatus(200);
-        echo "\n[PASS] GET /api/room/{id} -> 200";
+        $this->assertEquals('@ocean_owner_kh', $roomShow->json('data.landlord.telegram'));
+        echo "\n[PASS] GET /api/room/{id} (landlord.telegram verified) -> 200";
 
         // 14. Room Update
         $roomUpdate = $this->withHeader('Authorization', "Bearer {$authToken}")
@@ -136,7 +146,9 @@ class AllEndpointsTest extends TestCase
         // 15. Room Details Show
         $roomDetailShow = $this->getJson("/api/room-details/{$roomId}");
         $roomDetailShow->assertStatus(200);
-        echo "\n[PASS] GET /api/room-details/{id} -> 200";
+        $this->assertEquals('@ocean_owner_kh', $roomDetailShow->json('data.landlord.telegram'));
+        $this->assertEquals('@ocean_owner_kh', $roomDetailShow->json('data.contact_info.telegram'));
+        echo "\n[PASS] GET /api/room-details/{id} (contact_info.telegram verified) -> 200";
 
         // 16. Room Details Update
         $roomDetailUpdate = $this->withHeader('Authorization', "Bearer {$authToken}")

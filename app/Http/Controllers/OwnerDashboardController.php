@@ -82,6 +82,7 @@ class OwnerDashboardController extends Controller
                     'avatar' => $formatUrl($user->avatar),
                     'is_verified' => (bool) $user->is_verified,
                     'location_tag' => $user->location_tag ?? 'Phnom Penh, Cambodia',
+                    'telegram' => $user->telegram,
                     'role' => $user->role?->name ?? 'owner',
                 ],
                 'stats' => [

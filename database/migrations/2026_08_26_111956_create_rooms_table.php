@@ -19,10 +19,14 @@ return new class extends Migration
             $table->string('type')->default('Private Room');
             $table->decimal('price', 10, 2);
             $table->string('price_period')->default('month');
+            $table->boolean('is_negotiable')->default(false);
             $table->string('status')->default('AVAILABLE NOW');
+            $table->boolean('is_featured')->default(false);
             $table->decimal('rating', 2, 1)->default(4.8);
             $table->unsignedInteger('reviews_count')->default(0);
             $table->string('address');
+            $table->decimal('latitude', 10, 7)->nullable();
+            $table->decimal('longitude', 10, 7)->nullable();
             $table->string('image')->nullable();
             $table->timestamps();
             
