@@ -45,7 +45,7 @@ class RoomController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Room::with(['category', 'user']);
+        $query = Room::with(['category', 'user', 'detail']);
 
         if ($request->filled('search')) {
             $search = $request->input('search');

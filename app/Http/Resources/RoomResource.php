@@ -57,6 +57,8 @@ class RoomResource extends JsonResource
             'address' => $this->address,
             'image' => $formatUrl($this->image),
             'is_favorite' => $isFavorite,
+            'latitude' => $this->relationLoaded('detail') && $this->detail ? (float) $this->detail->latitude : null,
+            'longitude' => $this->relationLoaded('detail') && $this->detail ? (float) $this->detail->longitude : null,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
