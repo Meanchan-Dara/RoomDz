@@ -24,7 +24,11 @@ class Room extends Model
         'rating',
         'reviews_count',
         'address',
+        'latitude',
+        'longitude',
         'image',
+        'is_negotiable',
+        'is_featured',
     ];
 
     protected $casts = [
@@ -33,6 +37,10 @@ class Room extends Model
         'price' => 'float',
         'rating' => 'float',
         'reviews_count' => 'integer',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'is_negotiable' => 'boolean',
+        'is_featured' => 'boolean',
     ];
 
     public function category(): BelongsTo

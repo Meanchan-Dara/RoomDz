@@ -28,6 +28,8 @@ class User extends Authenticatable
         'phone',
         'avatar',
         'google_id',
+        'is_verified',
+        'location_tag',
     ];
 
     /**
@@ -47,6 +49,7 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'is_verified' => 'boolean',
     ];
 
     /**
@@ -87,5 +90,29 @@ class User extends Authenticatable
     public function favoriteRooms(): BelongsToMany
     {
         return $this->belongsToMany(Room::class, 'favorites')->withTimestamps();
+    }
+
+    /**
+     * Check if the user has the "owner" role.
+     */
+    public function isOwner(): bool
+    {
+        return $this->role?->name === 'owner';
+    }
+
+    /**
+     * Check if the user has the "admin" role.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->role?->name === 'admin';
+    }
+
+    /**
+     * Check if the user has any of the given roles.
+     */
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role?->name, $roles);
     }
 }

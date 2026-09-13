@@ -21,6 +21,13 @@ class RoomDetail extends Model
         'house_rules',
         'latitude',
         'longitude',
+        'utilities',
+        'rental_terms',
+        'rules_permissions',
+        'required_documents',
+        'payment_methods',
+        'payment_cycle',
+        'contact_info',
     ];
 
     protected $casts = [
@@ -29,6 +36,12 @@ class RoomDetail extends Model
         'house_rules' => 'array',
         'latitude' => 'float',
         'longitude' => 'float',
+        'utilities' => 'array',
+        'rental_terms' => 'array',
+        'rules_permissions' => 'array',
+        'required_documents' => 'array',
+        'payment_methods' => 'array',
+        'contact_info' => 'array',
     ];
 
     public function room(): BelongsTo

@@ -5,6 +5,9 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\OtpCodeController;
+use App\Http\Controllers\OwnerDashboardController;
+use App\Http\Controllers\OwnerRoomController;
+use App\Http\Controllers\OwnerViewingRequestController;
 use App\Http\Controllers\ResetOTPController;
 use App\Http\Controllers\ResetPasswordController;
 use App\Http\Controllers\RoomController;
@@ -88,5 +91,25 @@ Route::delete('/category/{id}', [CategoryController::class, 'destroy']);
 
 // Roles
 Route::get('/roles', [RoleController::class, 'index']);
+
+// Owner Protected Routes (Owner & Admin)
+Route::middleware(['auth:sanctum', 'role:owner,admin'])->prefix('owner')->group(function () {
+    // Dashboard Stats
+    Route::get('/dashboard', [OwnerDashboardController::class, 'index']);
+
+    // Owner Room Management (CRUD on own rooms)
+    Route::get('/rooms', [OwnerRoomController::class, 'index']);
+    Route::post('/rooms', [OwnerRoomController::class, 'store']);
+    Route::get('/rooms/{id}', [OwnerRoomController::class, 'show']);
+    Route::put('/rooms/{id}', [OwnerRoomController::class, 'update']);
+    Route::post('/rooms/{id}', [OwnerRoomController::class, 'update']); // for multipart/form-data
+    Route::delete('/rooms/{id}', [OwnerRoomController::class, 'destroy']);
+
+    // Owner Viewing Request Management (Viewing requests on own rooms)
+    Route::get('/viewing-requests', [OwnerViewingRequestController::class, 'index']);
+    Route::get('/viewing-requests/{id}', [OwnerViewingRequestController::class, 'show']);
+    Route::put('/viewing-requests/{id}/confirm', [OwnerViewingRequestController::class, 'confirm']);
+    Route::put('/viewing-requests/{id}/reject', [OwnerViewingRequestController::class, 'reject']);
+});
 
 

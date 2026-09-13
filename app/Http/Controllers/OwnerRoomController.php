@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Http\Resources\RoomDetailResource;
 use App\Http\Resources\RoomResource;
 use App\Models\Room;
-use App\Models\RoomDetail;
-use App\Models\ViewingRequest;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,14 +13,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class RoomController extends Controller
+class OwnerRoomController extends Controller
 {
     /**
      * Upload an image file to Cloudinary, with fallback to public disk URL.
-     *
-     * @param UploadedFile $file
-     * @param string $folder
-     * @return string
      */
     private function uploadImageFile(UploadedFile $file, string $folder = 'rooms'): string
     {
@@ -41,11 +35,13 @@ class RoomController extends Controller
     }
 
     /**
-     * Display a listing of rooms.
+     * List all rooms owned by the authenticated owner.
+     * Supports search, filter by category/status, and pagination.
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Room::with(['category', 'user', 'detail']);
+        $query = Room::with(['category', 'user', 'detail'])
+            ->where('user_id', $request->user()->id);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -57,18 +53,6 @@ class RoomController extends Controller
 
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->input('category_id'));
-        }
-
-        if ($request->filled('category')) {
-            $category = $request->input('category');
-            $query->whereHas('category', function ($q) use ($category) {
-                $q->where('name', 'ilike', "%{$category}%")
-                    ->orWhere('slug', $category);
-            });
-        }
-
-        if ($request->filled('type')) {
-            $query->where('type', $request->input('type'));
         }
 
         if ($request->filled('status')) {
@@ -94,13 +78,13 @@ class RoomController extends Controller
     }
 
     /**
-     * Store a newly created room and its detail.
+     * Create a new room for the authenticated owner.
+     * Automatically sets user_id to the owner's ID.
      */
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'category_id' => 'nullable|integer|exists:categories,id',
-            'user_id' => 'nullable|integer|exists:users,id',
             'name' => 'required|string|max:255',
             'type' => 'nullable|string|max:100',
             'price' => 'required|numeric|min:0',
@@ -132,6 +116,7 @@ class RoomController extends Controller
             'longitude' => 'nullable|numeric',
         ]);
 
+        // Helper to parse array/json fields if sent as JSON strings from Flutter
         $parseJsonField = function ($val, $default = []) {
             if (is_array($val)) return $val;
             if (is_string($val)) {
@@ -141,7 +126,7 @@ class RoomController extends Controller
             return $default;
         };
 
-        // Handle main image upload to Cloudinary or URL
+        // Handle main image upload
         $mainImageUrl = null;
         if ($request->hasFile('image')) {
             $mainImageUrl = $this->uploadImageFile($request->file('image'), 'rooms');
@@ -149,7 +134,7 @@ class RoomController extends Controller
             $mainImageUrl = $validated['image'];
         }
 
-        // Handle gallery images upload to Cloudinary or URLs
+        // Handle gallery images
         $galleryUrls = [];
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $file) {
@@ -169,12 +154,10 @@ class RoomController extends Controller
             $galleryUrls = [$mainImageUrl];
         }
 
-        $userId = $request->user('sanctum')?->id ?? $request->user()?->id ?? ($validated['user_id'] ?? null);
-
-        $room = DB::transaction(function () use ($validated, $userId, $mainImageUrl, $galleryUrls, $parseJsonField) {
+        $room = DB::transaction(function () use ($request, $validated, $mainImageUrl, $galleryUrls, $parseJsonField) {
             $room = Room::create([
                 'category_id' => $validated['category_id'] ?? null,
-                'user_id' => $userId,
+                'user_id' => $request->user()->id, // Always set to the authenticated owner
                 'name' => $validated['name'],
                 'type' => $validated['type'] ?? 'Private Room',
                 'price' => $validated['price'],
@@ -220,25 +203,28 @@ class RoomController extends Controller
     }
 
     /**
-     * Display the specified room with all details.
+     * Show a specific room owned by the authenticated owner.
      */
-    public function show(string $id): RoomDetailResource
+    public function show(Request $request, string $id): RoomDetailResource
     {
-        $room = Room::with(['detail', 'category', 'user'])->findOrFail($id);
+        $room = Room::with(['detail', 'category', 'user'])
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
 
         return new RoomDetailResource($room);
     }
 
     /**
-     * Update the specified room and its details.
+     * Update a room owned by the authenticated owner.
      */
-    public function update(Request $request, string $id): RoomDetailResource
+    public function update(Request $request, string $id): JsonResponse
     {
-        $room = Room::with(['detail', 'category', 'user'])->findOrFail($id);
+        $room = Room::with(['detail', 'category', 'user'])
+            ->where('user_id', $request->user()->id)
+            ->findOrFail($id);
 
         $validated = $request->validate([
             'category_id' => 'nullable|integer|exists:categories,id',
-            'user_id' => 'nullable|integer|exists:users,id',
             'name' => 'sometimes|required|string|max:255',
             'type' => 'nullable|string|max:100',
             'price' => 'sometimes|required|numeric|min:0',
@@ -308,7 +294,6 @@ class RoomController extends Controller
         DB::transaction(function () use ($room, $validated, $mainImageUrl, $galleryUrls, $parseJsonField) {
             $room->update(array_filter([
                 'category_id' => array_key_exists('category_id', $validated) ? $validated['category_id'] : $room->category_id,
-                'user_id' => array_key_exists('user_id', $validated) ? $validated['user_id'] : $room->user_id,
                 'name' => $validated['name'] ?? null,
                 'type' => $validated['type'] ?? null,
                 'price' => $validated['price'] ?? null,
@@ -353,53 +338,24 @@ class RoomController extends Controller
 
         $room->load(['detail', 'category', 'user']);
 
-        return new RoomDetailResource($room);
+        return response()->json([
+            'message' => 'Room updated successfully',
+            'data' => new RoomDetailResource($room),
+        ]);
     }
 
     /**
-     * Remove the specified room.
+     * Delete a room owned by the authenticated owner.
      */
-    public function destroy(string $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
-        $room = Room::findOrFail($id);
+        $room = Room::where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
         $room->delete();
 
         return response()->json([
             'message' => 'Room deleted successfully',
         ]);
-    }
-
-    /**
-     * Handle "Request Viewing" action from the bottom bar of Room Detail screen.
-     */
-    public function requestViewing(Request $request, string $id): JsonResponse
-    {
-        $room = Room::findOrFail($id);
-
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'phone' => 'required|string|max:50',
-            'email' => 'nullable|email|max:255',
-            'preferred_date' => 'nullable|date',
-            'preferred_time' => 'nullable|string|max:50',
-            'notes' => 'nullable|string|max:1000',
-        ]);
-
-        $viewingRequest = ViewingRequest::create([
-            'room_id' => $room->id,
-            'user_id' => $request->user('sanctum')?->id ?? $request->user()?->id,
-            'name' => $validated['name'],
-            'phone' => $validated['phone'],
-            'email' => $validated['email'] ?? null,
-            'preferred_date' => $validated['preferred_date'] ?? null,
-            'preferred_time' => $validated['preferred_time'] ?? null,
-            'notes' => $validated['notes'] ?? null,
-            'status' => 'pending',
-        ]);
-
-        return response()->json([
-            'message' => 'Viewing request submitted successfully',
-            'data' => $viewingRequest,
-        ], 201);
     }
 }
