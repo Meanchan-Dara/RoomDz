@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Auth;
 
 class RoomResource extends JsonResource
 {
@@ -21,6 +22,13 @@ class RoomResource extends JsonResource
             }
             return url(ltrim($url, '/'));
         };
+
+        // Check if the authenticated user has favorited this room
+        $isFavorite = false;
+        $user = $request->user('sanctum');
+        if ($user) {
+            $isFavorite = $this->favorites()->where('user_id', $user->id)->exists();
+        }
 
         return [
             'id' => $this->id,
@@ -42,13 +50,16 @@ class RoomResource extends JsonResource
             'name' => $this->name,
             'type' => $this->type,
             'price' => (float) $this->price,
+            'price_period' => $this->price_period,
             'status' => $this->status,
             'rating' => (float) $this->rating,
             'reviews_count' => (int) $this->reviews_count,
             'address' => $this->address,
             'image' => $formatUrl($this->image),
+            'is_favorite' => $isFavorite,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
     }
 }
+

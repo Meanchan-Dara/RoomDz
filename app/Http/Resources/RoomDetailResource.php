@@ -47,6 +47,13 @@ class RoomDetailResource extends JsonResource
         $latitude = $detail?->latitude ? (float) $detail->latitude : null;
         $longitude = $detail?->longitude ? (float) $detail->longitude : null;
 
+        // Check if the authenticated user has favorited this room
+        $isFavorite = false;
+        $user = $request->user('sanctum');
+        if ($user) {
+            $isFavorite = $this->favorites()->where('user_id', $user->id)->exists();
+        }
+
         return [
             'id' => $this->id,
             'category_id' => $this->category_id,
@@ -67,6 +74,7 @@ class RoomDetailResource extends JsonResource
             'name' => $this->name,
             'status' => $this->status ?? 'AVAILABLE NOW',
             'price' => (float) $this->price,
+            'price_period' => $this->price_period,
             'rating' => (float) $this->rating,
             'reviews_count' => (int) $this->reviews_count,
             'address' => $this->address,
@@ -88,7 +96,7 @@ class RoomDetailResource extends JsonResource
                 'latitude' => $latitude,
                 'longitude' => $longitude,
             ],
-            'is_favorite' => false,
+            'is_favorite' => $isFavorite,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

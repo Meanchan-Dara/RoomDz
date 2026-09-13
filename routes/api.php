@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\OtpCodeController;
 use App\Http\Controllers\ResetOTPController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\ResetPasswordController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\RoomDetailController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\ViewingRequestController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -45,9 +47,22 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/profile', [AuthController::class, 'profile']);
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::post('/profile', [AuthController::class, 'updateProfile']); // For multipart/form-data (avatar upload)
+    Route::put('/change-password', [AuthController::class, 'changePassword']);
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
+
+    // Favorites
+    Route::get('/favorites', [FavoriteController::class, 'index']);
+    Route::post('/favorites/toggle/{roomId}', [FavoriteController::class, 'toggle']);
+    Route::get('/favorites/check/{roomId}', [FavoriteController::class, 'check']);
+
+    // My Viewing Requests (Appointments)
+    Route::get('/my-viewing-requests', [ViewingRequestController::class, 'myRequests']);
+    Route::get('/my-viewing-requests/{id}', [ViewingRequestController::class, 'show']);
+    Route::put('/my-viewing-requests/{id}/cancel', [ViewingRequestController::class, 'cancel']);
 });
 
 // Room
@@ -73,4 +88,5 @@ Route::delete('/category/{id}', [CategoryController::class, 'destroy']);
 
 // Roles
 Route::get('/roles', [RoleController::class, 'index']);
+
 
