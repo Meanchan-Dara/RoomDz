@@ -33,12 +33,10 @@ class OwnerDashboardController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $totalRooms = $rooms->count();
-        $availableRooms = $rooms->filter(function ($r) {
-            return str_contains(strtolower($r->status), 'avail');
-        })->count();
+        $totalRooms = (int) $rooms->sum(fn ($r) => $r->total_units ?? 1);
+        $availableRooms = (int) $rooms->sum(fn ($r) => $r->available_units ?? (str_contains(strtolower($r->status), 'avail') ? ($r->total_units ?? 1) : 0));
 
-        $occupiedRooms = $totalRooms - $availableRooms;
+        $occupiedRooms = max(0, $totalRooms - $availableRooms);
         $occupancyRate = $totalRooms > 0 ? round(($occupiedRooms / $totalRooms) * 100) : 0;
 
         // Viewing requests count on owner's rooms
@@ -48,12 +46,18 @@ class OwnerDashboardController extends Controller
         $confirmedRequests = ViewingRequest::whereIn('room_id', $roomIds)->where('status', 'confirmed')->count();
         $rejectedRequests = ViewingRequest::whereIn('room_id', $roomIds)->where('status', 'rejected')->count();
 
-        // Estimated revenue calculation
-        $occupiedRevenue = $rooms->filter(function ($r) {
-            return !str_contains(strtolower($r->status), 'avail');
-        })->sum('price');
+        // Estimated revenue calculation based on units occupied
+        $occupiedRevenue = $rooms->sum(function ($r) {
+            $total = $r->total_units ?? 1;
+            $avail = $r->available_units ?? (str_contains(strtolower($r->status), 'avail') ? $total : 0);
+            $occupied = max(0, $total - $avail);
+            return $occupied * (float) $r->price;
+        });
 
-        $potentialRevenue = $rooms->sum('price');
+        $potentialRevenue = $rooms->sum(function ($r) {
+            $total = $r->total_units ?? 1;
+            return $total * (float) $r->price;
+        });
         $targetRevenue = $potentialRevenue > 0 ? $potentialRevenue : 1500.0;
 
         // Recent listings for quick access on Profile screen
@@ -65,6 +69,8 @@ class OwnerDashboardController extends Controller
                 'price' => (float) $r->price,
                 'price_period' => $r->price_period,
                 'status' => $r->status,
+                'total_units' => (int) ($r->total_units ?? 1),
+                'available_units' => (int) ($r->available_units ?? 1),
                 'floor' => $r->detail?->floor ?? null,
                 'address' => $r->address,
                 'image' => $formatUrl($r->image),

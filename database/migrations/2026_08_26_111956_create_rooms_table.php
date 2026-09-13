@@ -21,6 +21,8 @@ return new class extends Migration
             $table->string('price_period')->default('month');
             $table->boolean('is_negotiable')->default(false);
             $table->string('status')->default('AVAILABLE NOW');
+            $table->unsignedInteger('total_units')->default(1);
+            $table->unsignedInteger('available_units')->default(1);
             $table->boolean('is_featured')->default(false);
             $table->decimal('rating', 2, 1)->default(4.8);
             $table->unsignedInteger('reviews_count')->default(0);

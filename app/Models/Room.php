@@ -29,6 +29,8 @@ class Room extends Model
         'image',
         'is_negotiable',
         'is_featured',
+        'total_units',
+        'available_units',
     ];
 
     protected $casts = [
@@ -41,6 +43,8 @@ class Room extends Model
         'longitude' => 'float',
         'is_negotiable' => 'boolean',
         'is_featured' => 'boolean',
+        'total_units' => 'integer',
+        'available_units' => 'integer',
     ];
 
     public function category(): BelongsTo

@@ -106,6 +106,8 @@ class RoomController extends Controller
             'price' => 'required|numeric|min:0',
             'price_period' => 'nullable|string|max:50',
             'status' => 'nullable|string|max:50',
+            'total_units' => 'nullable|integer|min:1',
+            'available_units' => 'nullable|integer|min:0',
             'is_negotiable' => 'nullable|boolean',
             'is_featured' => 'nullable|boolean',
             'rating' => 'nullable|numeric|between:0,5',
@@ -170,8 +172,10 @@ class RoomController extends Controller
         }
 
         $userId = $request->user('sanctum')?->id ?? $request->user()?->id ?? ($validated['user_id'] ?? null);
+        $totalUnits = isset($validated['total_units']) ? (int) $validated['total_units'] : 1;
+        $availableUnits = isset($validated['available_units']) ? (int) $validated['available_units'] : $totalUnits;
 
-        $room = DB::transaction(function () use ($validated, $userId, $mainImageUrl, $galleryUrls, $parseJsonField) {
+        $room = DB::transaction(function () use ($validated, $userId, $mainImageUrl, $galleryUrls, $parseJsonField, $totalUnits, $availableUnits) {
             $room = Room::create([
                 'category_id' => $validated['category_id'] ?? null,
                 'user_id' => $userId,
@@ -179,7 +183,9 @@ class RoomController extends Controller
                 'type' => $validated['type'] ?? 'Private Room',
                 'price' => $validated['price'],
                 'price_period' => $validated['price_period'] ?? 'month',
-                'status' => $validated['status'] ?? 'AVAILABLE NOW',
+                'status' => $validated['status'] ?? ($availableUnits > 0 ? 'AVAILABLE NOW' : 'OCCUPIED'),
+                'total_units' => $totalUnits,
+                'available_units' => $availableUnits,
                 'is_negotiable' => filter_var($validated['is_negotiable'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'is_featured' => filter_var($validated['is_featured'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'rating' => $validated['rating'] ?? 5.0,
@@ -244,6 +250,8 @@ class RoomController extends Controller
             'price' => 'sometimes|required|numeric|min:0',
             'price_period' => 'nullable|string|max:50',
             'status' => 'nullable|string|max:50',
+            'total_units' => 'nullable|integer|min:1',
+            'available_units' => 'nullable|integer|min:0',
             'is_negotiable' => 'nullable|boolean',
             'is_featured' => 'nullable|boolean',
             'rating' => 'nullable|numeric|between:0,5',
@@ -314,6 +322,8 @@ class RoomController extends Controller
                 'price' => $validated['price'] ?? null,
                 'price_period' => $validated['price_period'] ?? null,
                 'status' => $validated['status'] ?? null,
+                'total_units' => array_key_exists('total_units', $validated) ? (int) $validated['total_units'] : null,
+                'available_units' => array_key_exists('available_units', $validated) ? (int) $validated['available_units'] : null,
                 'is_negotiable' => array_key_exists('is_negotiable', $validated) ? filter_var($validated['is_negotiable'], FILTER_VALIDATE_BOOLEAN) : null,
                 'is_featured' => array_key_exists('is_featured', $validated) ? filter_var($validated['is_featured'], FILTER_VALIDATE_BOOLEAN) : null,
                 'rating' => $validated['rating'] ?? null,

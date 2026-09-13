@@ -90,6 +90,8 @@ class OwnerRoomController extends Controller
             'price' => 'required|numeric|min:0',
             'price_period' => 'nullable|string|max:50',
             'status' => 'nullable|string|max:50',
+            'total_units' => 'nullable|integer|min:1',
+            'available_units' => 'nullable|integer|min:0',
             'is_negotiable' => 'nullable|boolean',
             'is_featured' => 'nullable|boolean',
             'rating' => 'nullable|numeric|between:0,5',
@@ -154,7 +156,10 @@ class OwnerRoomController extends Controller
             $galleryUrls = [$mainImageUrl];
         }
 
-        $room = DB::transaction(function () use ($request, $validated, $mainImageUrl, $galleryUrls, $parseJsonField) {
+        $totalUnits = isset($validated['total_units']) ? (int) $validated['total_units'] : 1;
+        $availableUnits = isset($validated['available_units']) ? (int) $validated['available_units'] : $totalUnits;
+
+        $room = DB::transaction(function () use ($request, $validated, $mainImageUrl, $galleryUrls, $parseJsonField, $totalUnits, $availableUnits) {
             $room = Room::create([
                 'category_id' => $validated['category_id'] ?? null,
                 'user_id' => $request->user()->id, // Always set to the authenticated owner
@@ -162,7 +167,9 @@ class OwnerRoomController extends Controller
                 'type' => $validated['type'] ?? 'Private Room',
                 'price' => $validated['price'],
                 'price_period' => $validated['price_period'] ?? 'month',
-                'status' => $validated['status'] ?? 'AVAILABLE NOW',
+                'status' => $validated['status'] ?? ($availableUnits > 0 ? 'AVAILABLE NOW' : 'OCCUPIED'),
+                'total_units' => $totalUnits,
+                'available_units' => $availableUnits,
                 'is_negotiable' => filter_var($validated['is_negotiable'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'is_featured' => filter_var($validated['is_featured'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'rating' => $validated['rating'] ?? 5.0,
@@ -230,6 +237,8 @@ class OwnerRoomController extends Controller
             'price' => 'sometimes|required|numeric|min:0',
             'price_period' => 'nullable|string|max:50',
             'status' => 'nullable|string|max:50',
+            'total_units' => 'nullable|integer|min:1',
+            'available_units' => 'nullable|integer|min:0',
             'is_negotiable' => 'nullable|boolean',
             'is_featured' => 'nullable|boolean',
             'rating' => 'nullable|numeric|between:0,5',
@@ -299,6 +308,8 @@ class OwnerRoomController extends Controller
                 'price' => $validated['price'] ?? null,
                 'price_period' => $validated['price_period'] ?? null,
                 'status' => $validated['status'] ?? null,
+                'total_units' => array_key_exists('total_units', $validated) ? (int) $validated['total_units'] : null,
+                'available_units' => array_key_exists('available_units', $validated) ? (int) $validated['available_units'] : null,
                 'is_negotiable' => array_key_exists('is_negotiable', $validated) ? filter_var($validated['is_negotiable'], FILTER_VALIDATE_BOOLEAN) : null,
                 'is_featured' => array_key_exists('is_featured', $validated) ? filter_var($validated['is_featured'], FILTER_VALIDATE_BOOLEAN) : null,
                 'rating' => $validated['rating'] ?? null,
@@ -356,6 +367,81 @@ class OwnerRoomController extends Controller
 
         return response()->json([
             'message' => 'Room deleted successfully',
+        ]);
+    }
+
+    /**
+     * Quick action: Deduct one or more units when rented out.
+     */
+    public function rentOut(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'units' => 'nullable|integer|min:1',
+        ]);
+
+        $unitsToDeduct = $validated['units'] ?? 1;
+
+        $room = Room::where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        if ($room->available_units < $unitsToDeduct) {
+            return response()->json([
+                'message' => 'Not enough available units to rent out.',
+                'available_units' => (int) $room->available_units,
+            ], 422);
+        }
+
+        $newAvailable = max(0, $room->available_units - $unitsToDeduct);
+        $newStatus = $newAvailable === 0 ? 'OCCUPIED' : $room->status;
+
+        $room->update([
+            'available_units' => $newAvailable,
+            'status' => $newStatus,
+        ]);
+
+        return response()->json([
+            'message' => "Successfully rented out {$unitsToDeduct} unit(s).",
+            'data' => [
+                'id' => $room->id,
+                'total_units' => (int) $room->total_units,
+                'available_units' => (int) $room->available_units,
+                'is_available' => (bool) ($room->available_units > 0),
+                'status' => $room->status,
+            ],
+        ]);
+    }
+
+    /**
+     * Quick action: Release one or more units when tenant vacates.
+     */
+    public function releaseUnit(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'units' => 'nullable|integer|min:1',
+        ]);
+
+        $unitsToAdd = $validated['units'] ?? 1;
+
+        $room = Room::where('user_id', $request->user()->id)
+            ->findOrFail($id);
+
+        $newAvailable = min($room->total_units, $room->available_units + $unitsToAdd);
+        $newStatus = $newAvailable > 0 && $room->status === 'OCCUPIED' ? 'AVAILABLE NOW' : $room->status;
+
+        $room->update([
+            'available_units' => $newAvailable,
+            'status' => $newStatus,
+        ]);
+
+        return response()->json([
+            'message' => "Successfully released {$unitsToAdd} unit(s).",
+            'data' => [
+                'id' => $room->id,
+                'total_units' => (int) $room->total_units,
+                'available_units' => (int) $room->available_units,
+                'is_available' => (bool) ($room->available_units > 0),
+                'status' => $room->status,
+            ],
         ]);
     }
 }

@@ -115,4 +115,88 @@ class RoomCategoryTest extends TestCase
         $this->assertDatabaseMissing('room_details', ['room_id' => $roomId]);
         $this->assertDatabaseMissing('viewing_requests', ['room_id' => $roomId]);
     }
+
+    public function test_owner_multiple_room_units_and_dashboard(): void
+    {
+        $ownerRole = role::firstOrCreate(['name' => 'owner'], ['description' => 'Property or room owner']);
+        $owner = User::create([
+            'name' => 'Multi-Unit Landlord',
+            'email' => 'multi_' . uniqid() . '@example.com',
+            'password' => bcrypt('secret123'),
+            'role_id' => $ownerRole->id,
+            'phone' => '+85511223344',
+            'telegram' => '@multi_landlord',
+        ]);
+
+        $category = Category::firstOrCreate(['name' => 'Standard Room', 'slug' => 'standard-room']);
+        $token = $owner->createToken('auth')->plainTextToken;
+
+        // Create 1 listing representing 10 identical rooms, 8 available (2 occupied)
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/owner/rooms', [
+                'category_id' => $category->id,
+                'name' => 'Budget Studio 10-Pack',
+                'type' => 'Studio',
+                'price' => 100.00,
+                'price_period' => 'month',
+                'total_units' => 10,
+                'available_units' => 8,
+                'address' => 'Tuol Tompoung, Phnom Penh',
+                'description' => '10 identical fully furnished studio units',
+            ]);
+
+        $response->assertStatus(201);
+        $this->assertEquals(10, $response->json('data.total_units'));
+        $this->assertEquals(8, $response->json('data.available_units'));
+        $this->assertTrue($response->json('data.is_available'));
+
+        $roomId = $response->json('data.id');
+
+        // Check Owner Dashboard calculations
+        $dashResp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/owner/dashboard');
+
+        $dashResp->assertStatus(200);
+        $this->assertEquals(10, $dashResp->json('data.stats.total_rooms'));
+        $this->assertEquals(8, $dashResp->json('data.stats.available_rooms'));
+        $this->assertEquals(2, $dashResp->json('data.stats.occupied_rooms'));
+        $this->assertEquals(20, $dashResp->json('data.stats.occupancy_rate')); // 2 / 10 = 20%
+        $this->assertEquals(200.0, $dashResp->json('data.earnings.current_revenue')); // 2 * $100 = $200
+
+        // Now simulate all units becoming rented out (available_units = 0)
+        $updateResp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->putJson("/api/owner/rooms/{$roomId}", [
+                'available_units' => 0,
+            ]);
+
+        $updateResp->assertStatus(200);
+        $this->assertEquals(0, $updateResp->json('data.available_units'));
+        $this->assertFalse($updateResp->json('data.is_available'));
+
+        // Check dashboard updated occupancy
+        $dashResp2 = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/owner/dashboard');
+
+        $this->assertEquals(10, $dashResp2->json('data.stats.total_rooms'));
+        $this->assertEquals(0, $dashResp2->json('data.stats.available_rooms'));
+        $this->assertEquals(10, $dashResp2->json('data.stats.occupied_rooms'));
+        $this->assertEquals(100, $dashResp2->json('data.stats.occupancy_rate')); // 10 / 10 = 100%
+        $this->assertEquals(1000.0, $dashResp2->json('data.earnings.current_revenue')); // 10 * $100 = $1000
+
+        // Test Quick Action: release-unit (tenant vacates, +2 units become available)
+        $releaseResp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/owner/rooms/{$roomId}/release-unit", ['units' => 2]);
+
+        $releaseResp->assertStatus(200);
+        $this->assertEquals(2, $releaseResp->json('data.available_units'));
+        $this->assertTrue($releaseResp->json('data.is_available'));
+
+        // Test Quick Action: rent-out (another tenant rents, -1 unit)
+        $rentResp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/owner/rooms/{$roomId}/rent-out"); // default 1 unit
+
+        $rentResp->assertStatus(200);
+        $this->assertEquals(1, $rentResp->json('data.available_units'));
+        $this->assertTrue($rentResp->json('data.is_available'));
+    }
 }
