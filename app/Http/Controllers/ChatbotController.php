@@ -91,7 +91,7 @@ class ChatbotController extends Controller
             ->orderBy('last_activity_at', 'desc')
             ->paginate(20);
 
-        $data = $conversations->getCollection()->map(function ($conv) {
+        $data = collect($conversations->items())->map(function ($conv) {
             return [
                 'id' => $conv->id,
                 'title' => $conv->title,
