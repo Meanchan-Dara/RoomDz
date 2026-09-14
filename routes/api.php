@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\OtpCodeController;
@@ -114,4 +115,13 @@ Route::middleware(['auth:sanctum', 'role:owner,admin'])->prefix('owner')->group(
     Route::put('/viewing-requests/{id}/reject', [OwnerViewingRequestController::class, 'reject']);
 });
 
+// AI Chatbot (Public — works for both guests and authenticated users)
+Route::post('/chatbot/message', [ChatbotController::class, 'sendMessage']);
+Route::post('/chatbot/suggestions', [ChatbotController::class, 'suggestions']);
 
+// AI Chatbot History (Authenticated users only)
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/chatbot/conversations', [ChatbotController::class, 'conversations']);
+    Route::get('/chatbot/conversations/{id}', [ChatbotController::class, 'history']);
+    Route::delete('/chatbot/conversations/{id}', [ChatbotController::class, 'deleteConversation']);
+});

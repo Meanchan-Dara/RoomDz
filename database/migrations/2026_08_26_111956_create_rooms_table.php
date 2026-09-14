@@ -24,6 +24,7 @@ return new class extends Migration
             $table->unsignedInteger('total_units')->default(1);
             $table->unsignedInteger('available_units')->default(1);
             $table->boolean('is_featured')->default(false);
+            $table->string('listing_type')->default('standard'); // Values: 'standard' (Free), 'featured' (Boost), 'premium' (Top placement)
             $table->decimal('rating', 2, 1)->default(4.8);
             $table->unsignedInteger('reviews_count')->default(0);
             $table->string('address');
