@@ -56,6 +56,7 @@ class RoomResource extends JsonResource
             'price_period' => $this->price_period,
             'is_negotiable' => (bool) $this->is_negotiable,
             'is_featured' => (bool) $this->is_featured,
+            'listing_type' => $this->listing_type ?? 'standard',
             'status' => $this->status,
             'total_units' => (int) ($this->total_units ?? 1),
             'available_units' => (int) ($this->available_units ?? 1),

@@ -29,6 +29,7 @@ class Room extends Model
         'image',
         'is_negotiable',
         'is_featured',
+        'listing_type',
         'total_units',
         'available_units',
     ];

@@ -84,6 +84,7 @@ class RoomDetailResource extends JsonResource
             'price_period' => $this->price_period,
             'is_negotiable' => (bool) $this->is_negotiable,
             'is_featured' => (bool) $this->is_featured,
+            'listing_type' => $this->listing_type ?? 'standard',
             'rating' => (float) $this->rating,
             'reviews_count' => (int) $this->reviews_count,
             'address' => $this->address,
