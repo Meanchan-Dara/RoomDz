@@ -73,6 +73,8 @@ class RoomDetailResource extends JsonResource
                 'is_verified' => (bool) $this->user->is_verified,
                 'location_tag' => $this->user->location_tag,
                 'telegram' => $this->user->telegram,
+                'bakong_account_id' => $this->user->bakong_account_id,
+                'bakong_merchant_name' => $this->user->bakong_merchant_name,
             ] : null,
             'name' => $this->name,
             'type' => $this->type ?? 'Private Room',

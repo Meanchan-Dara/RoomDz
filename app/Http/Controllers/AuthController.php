@@ -138,6 +138,8 @@ class AuthController extends Controller
                 'is_verified' => (bool) $user->is_verified,
                 'location_tag' => $user->location_tag,
                 'telegram' => $user->telegram,
+                'bakong_account_id' => $user->bakong_account_id,
+                'bakong_merchant_name' => $user->bakong_merchant_name,
                 'email_verified_at' => $user->email_verified_at?->toISOString(),
                 'role' => $user->role ? [
                     'id' => $user->role->id,
@@ -168,6 +170,8 @@ class AuthController extends Controller
             'phone' => ['nullable', 'string', 'max:50'],
             'location_tag' => ['nullable', 'string', 'max:255'],
             'telegram' => ['nullable', 'string', 'max:100'],
+            'bakong_account_id' => ['nullable', 'string', 'max:100'],
+            'bakong_merchant_name' => ['nullable', 'string', 'max:50'],
             'avatar' => ['nullable'],
             'password' => ['nullable', 'min:6'],
         ]);
@@ -211,6 +215,8 @@ class AuthController extends Controller
                 'is_verified' => (bool) $user->is_verified,
                 'location_tag' => $user->location_tag,
                 'telegram' => $user->telegram,
+                'bakong_account_id' => $user->bakong_account_id,
+                'bakong_merchant_name' => $user->bakong_merchant_name,
                 'email_verified_at' => $user->email_verified_at?->toISOString(),
                 'role' => $user->role ? [
                     'id' => $user->role->id,

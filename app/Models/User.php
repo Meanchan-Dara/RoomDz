@@ -31,6 +31,8 @@ class User extends Authenticatable
         'is_verified',
         'location_tag',
         'telegram',
+        'bakong_account_id',
+        'bakong_merchant_name',
     ];
 
     /**
@@ -91,6 +93,14 @@ class User extends Authenticatable
     public function favoriteRooms(): BelongsToMany
     {
         return $this->belongsToMany(Room::class, 'favorites')->withTimestamps();
+    }
+
+    /**
+     * Get all payments made by this user.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
     }
 
     /**

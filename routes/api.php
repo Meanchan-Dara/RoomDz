@@ -9,6 +9,7 @@ use App\Http\Controllers\OtpCodeController;
 use App\Http\Controllers\OwnerDashboardController;
 use App\Http\Controllers\OwnerRoomController;
 use App\Http\Controllers\OwnerViewingRequestController;
+use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ResetOTPController;
 use App\Http\Controllers\ResetPasswordController;
 use App\Http\Controllers\RoomController;
@@ -124,4 +125,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/chatbot/conversations', [ChatbotController::class, 'conversations']);
     Route::get('/chatbot/conversations/{id}', [ChatbotController::class, 'history']);
     Route::delete('/chatbot/conversations/{id}', [ChatbotController::class, 'deleteConversation']);
+
+    // Payments History
+    Route::get('/payments', [PaymentController::class, 'index']);
 });
+
+// Bakong KHQR Payments
+Route::prefix('payments')->group(function () {
+    Route::post('/create-qr', [PaymentController::class, 'createQr']);
+    Route::get('/{id}/status', [PaymentController::class, 'checkStatus']);
+    Route::post('/{id}/check', [PaymentController::class, 'checkStatus']);
+    Route::get('/{id}', [PaymentController::class, 'show']);
+});
+

@@ -19,12 +19,12 @@ class ChatbotService
 
     public function __construct()
     {
-        $this->apiKey = config('chatbot.gemini.api_key', '');
-        $this->model = config('chatbot.gemini.model', 'gemini-2.0-flash');
-        $this->endpoint = config('chatbot.gemini.endpoint');
-        $this->systemPrompt = config('chatbot.system_prompt', '');
-        $this->maxHistory = config('chatbot.max_history', 10);
-        $this->maxRoomResults = config('chatbot.max_room_results', 6);
+        $this->apiKey = (string) (config('chatbot.gemini.api_key') ?? '');
+        $this->model = (string) (config('chatbot.gemini.model') ?? 'gemini-2.0-flash');
+        $this->endpoint = (string) (config('chatbot.gemini.endpoint') ?? 'https://generativelanguage.googleapis.com/v1beta/models');
+        $this->systemPrompt = (string) (config('chatbot.system_prompt') ?? '');
+        $this->maxHistory = (int) (config('chatbot.max_history') ?? 10);
+        $this->maxRoomResults = (int) (config('chatbot.max_room_results') ?? 6);
     }
 
     /**

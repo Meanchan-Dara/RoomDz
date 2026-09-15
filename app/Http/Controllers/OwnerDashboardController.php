@@ -89,6 +89,8 @@ class OwnerDashboardController extends Controller
                     'is_verified' => (bool) $user->is_verified,
                     'location_tag' => $user->location_tag ?? 'Phnom Penh, Cambodia',
                     'telegram' => $user->telegram,
+                    'bakong_account_id' => $user->bakong_account_id,
+                    'bakong_merchant_name' => $user->bakong_merchant_name,
                     'role' => $user->role?->name ?? 'owner',
                 ],
                 'stats' => [
@@ -109,10 +111,10 @@ class OwnerDashboardController extends Controller
                             'status' => 'active',
                         ],
                         [
-                            'name' => 'Bakong Wallet',
-                            'account' => $user->phone ?? 'Bakong QR',
+                            'name' => 'Bakong Account',
+                            'account' => $user->bakong_account_id ?? ($user->phone ?? 'Not configured'),
                             'type' => 'wallet',
-                            'status' => 'active_payout',
+                            'status' => $user->bakong_account_id ? 'active_payout' : 'needs_setup',
                         ],
                     ],
                 ],
