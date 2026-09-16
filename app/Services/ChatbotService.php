@@ -3,18 +3,23 @@
 namespace App\Services;
 
 use App\Models\ChatConversation;
-use App\Models\ChatMessage;
 use App\Models\Room;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class ChatbotService
 {
     private string $apiKey;
+
     private string $model;
+
     private string $endpoint;
+
     private string $systemPrompt;
+
     private int $maxHistory;
+
     private int $maxRoomResults;
 
     public function __construct()
@@ -47,12 +52,12 @@ class ChatbotService
         // 4. If intent is search_room, query the database
         $rooms = [];
         $roomIds = [];
-        if ($aiResult['intent'] === 'search_room' && !empty($aiResult['filters'])) {
+        if ($aiResult['intent'] === 'search_room' && ! empty($aiResult['filters'])) {
             $rooms = $this->searchRooms($aiResult['filters']);
             $roomIds = collect($rooms)->pluck('id')->toArray();
 
             // If rooms found, enhance the AI reply with room context
-            if (!empty($rooms)) {
+            if (! empty($rooms)) {
                 $aiResult = $this->enhanceResponseWithRooms($userMessage, $aiResult, $rooms, $history);
             } else {
                 // No rooms found — generate a helpful "no results" reply
@@ -64,7 +69,7 @@ class ChatbotService
         $assistantMsg = $conversation->messages()->create([
             'role' => 'assistant',
             'content' => $aiResult['reply'] ?? 'Sorry, I could not process your request.',
-            'room_results' => !empty($roomIds) ? $roomIds : null,
+            'room_results' => ! empty($roomIds) ? $roomIds : null,
             'metadata' => [
                 'intent' => $aiResult['intent'] ?? 'general',
                 'filters' => $aiResult['filters'] ?? null,
@@ -115,7 +120,7 @@ class ChatbotService
                 'parts' => [['text' => $userMessage]],
             ];
 
-            $url = $this->endpoint . $this->model . ':generateContent?key=' . $this->apiKey;
+            $url = $this->geminiUrl();
 
             $response = Http::timeout(30)->post($url, [
                 'system_instruction' => [
@@ -155,7 +160,6 @@ class ChatbotService
             ]);
 
             return $this->getFallbackResponse($userMessage);
-
         } catch (\Throwable $e) {
             Log::error('Chatbot AI error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
@@ -173,15 +177,16 @@ class ChatbotService
         try {
             $roomSummary = collect($rooms)->map(function ($room, $index) {
                 $num = $index + 1;
+
                 return "{$num}. {$room['name']} — \${$room['price']}/{$room['price_period']} — {$room['address']} — Rating: {$room['rating']}⭐";
             })->implode("\n");
 
             $enhancePrompt = "Based on the user's request: \"{$userMessage}\"\n\n" .
                 "I found these rooms:\n{$roomSummary}\n\n" .
-                "Please write a friendly, natural response presenting these rooms to the user. " .
+                'Please write a friendly, natural response presenting these rooms to the user. ' .
                 "Keep the same language as the user's message (Khmer or English). " .
-                "Include emojis for a lively feel. " .
-                "Respond in JSON format: {\"intent\": \"search_room\", \"filters\": null, \"reply\": \"your response\", \"suggestions\": [\"suggestion1\", \"suggestion2\", \"suggestion3\"]}";
+                'Include emojis for a lively feel. ' .
+                'Respond in JSON format: {"intent": "search_room", "filters": null, "reply": "your response", "suggestions": ["suggestion1", "suggestion2", "suggestion3"]}';
 
             $contents = [];
             foreach ($history as $msg) {
@@ -195,7 +200,7 @@ class ChatbotService
                 'parts' => [['text' => $enhancePrompt]],
             ];
 
-            $url = $this->endpoint . $this->model . ':generateContent?key=' . $this->apiKey;
+            $url = $this->geminiUrl();
 
             $response = Http::timeout(30)->post($url, [
                 'system_instruction' => [
@@ -218,6 +223,7 @@ class ChatbotService
                 if (json_last_error() === JSON_ERROR_NONE && isset($parsed['reply'])) {
                     $parsed['intent'] = 'search_room';
                     $parsed['filters'] = $aiResult['filters'];
+
                     return $parsed;
                 }
             }
@@ -237,7 +243,7 @@ class ChatbotService
         $isKhmer = $this->isKhmerText($userMessage);
 
         $reply = $isKhmer
-            ? "សុំទោស! 😔 ខ្ញុំមិនរកឃើញបន្ទប់ដែលត្រូវនឹងលក្ខខណ្ឌរបស់អ្នកទេ។ សូមសាកល្បងផ្លាស់ប្តូរតម្រង (តម្លៃ, ទីតាំង) ឬសួរខ្ញុំដើម្បីជួយស្វែងរកបន្ទប់ផ្សេងទៀត! 🔍"
+            ? 'សុំទោស! 😔 ខ្ញុំមិនរកឃើញបន្ទប់ដែលត្រូវនឹងលក្ខខណ្ឌរបស់អ្នកទេ។ សូមសាកល្បងផ្លាស់ប្តូរតម្រង (តម្លៃ, ទីតាំង) ឬសួរខ្ញុំដើម្បីជួយស្វែងរកបន្ទប់ផ្សេងទៀត! 🔍'
             : "Sorry! 😔 I couldn't find any rooms matching your criteria. Try adjusting your filters (price, location) or ask me to help find other options! 🔍";
 
         $suggestions = $isKhmer
@@ -262,50 +268,51 @@ class ChatbotService
         }
 
         $query = Room::with(['category', 'user', 'detail']);
+        $like = $this->caseInsensitiveLikeOperator();
 
         // Price filters
-        if (!empty($filters['max_price'])) {
+        if (! empty($filters['max_price'])) {
             $query->where('price', '<=', (float) $filters['max_price']);
         }
-        if (!empty($filters['min_price'])) {
+        if (! empty($filters['min_price'])) {
             $query->where('price', '>=', (float) $filters['min_price']);
         }
 
         // Location filter (search in address)
-        if (!empty($filters['location'])) {
+        if (! empty($filters['location'])) {
             $location = $filters['location'];
-            $query->where('address', 'ilike', "%{$location}%");
+            $query->where('address', $like, "%{$location}%");
         }
 
         // Type filter
-        if (!empty($filters['type'])) {
+        if (! empty($filters['type'])) {
             $type = $filters['type'];
-            $query->where(function ($q) use ($type) {
-                $q->where('type', 'ilike', "%{$type}%")
-                  ->orWhere('name', 'ilike', "%{$type}%");
+            $query->where(function ($q) use ($type, $like) {
+                $q->where('type', $like, "%{$type}%")
+                    ->orWhere('name', $like, "%{$type}%");
             });
         }
 
         // Category filter
-        if (!empty($filters['category'])) {
+        if (! empty($filters['category'])) {
             $category = $filters['category'];
-            $query->whereHas('category', function ($q) use ($category) {
-                $q->where('name', 'ilike', "%{$category}%")
-                  ->orWhere('slug', 'ilike', "%{$category}%");
+            $query->whereHas('category', function ($q) use ($category, $like) {
+                $q->where('name', $like, "%{$category}%")
+                    ->orWhere('slug', $like, "%{$category}%");
             });
         }
 
         // Status filter
-        if (!empty($filters['status'])) {
-            $query->where('status', 'ilike', "%{$filters['status']}%");
+        if (! empty($filters['status'])) {
+            $query->where('status', $like, "%{$filters['status']}%");
         }
 
         // Facilities filter (search in room detail)
-        if (!empty($filters['facilities']) && is_array($filters['facilities'])) {
+        if (! empty($filters['facilities']) && is_array($filters['facilities'])) {
             foreach ($filters['facilities'] as $facility) {
-                $query->whereHas('detail', function ($q) use ($facility) {
+                $query->whereHas('detail', function ($q) use ($facility, $like) {
                     $q->whereJsonContains('facilities', $facility)
-                      ->orWhere('facilities', 'ilike', "%{$facility}%");
+                        ->orWhere('facilities', $like, "%{$facility}%");
                 });
             }
         }
@@ -323,10 +330,13 @@ class ChatbotService
         // Format room results for response
         return $rooms->map(function ($room) {
             $formatUrl = function ($url) {
-                if (empty($url) || !is_string($url)) return $url;
+                if (empty($url) || ! is_string($url)) {
+                    return $url;
+                }
                 if (str_starts_with($url, 'http://') || str_starts_with($url, 'https://')) {
                     return $url;
                 }
+
                 return url(ltrim($url, '/'));
             };
 
@@ -366,6 +376,16 @@ class ChatbotService
         })->toArray();
     }
 
+    private function geminiUrl(): string
+    {
+        return rtrim($this->endpoint, '/') . '/' . ltrim($this->model, '/') . ':generateContent?key=' . $this->apiKey;
+    }
+
+    private function caseInsensitiveLikeOperator(): string
+    {
+        return DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+    }
+
     /**
      * Get conversation context (previous messages) for AI.
      */
@@ -376,7 +396,7 @@ class ChatbotService
             ->limit($this->maxHistory)
             ->get()
             ->reverse()
-            ->map(fn ($msg) => [
+            ->map(fn($msg) => [
                 'role' => $msg->role,
                 'content' => $msg->content,
             ])
@@ -393,6 +413,7 @@ class ChatbotService
         if (mb_strlen($message) > 50) {
             $title .= '...';
         }
+
         return $title;
     }
 
@@ -404,6 +425,7 @@ class ChatbotService
         if ($lang === 'en') {
             return config('chatbot.default_suggestions.en', []);
         }
+
         return config('chatbot.default_suggestions.km', []);
     }
 
@@ -446,7 +468,7 @@ class ChatbotService
             'intent' => 'general',
             'filters' => null,
             'reply' => $isKhmer
-                ? "សុំទោស! ខ្ញុំកំពុងមានបញ្ហាបច្ចេកទេសបន្តិច។ 😅 សូមព្យាយាមម្តងទៀតក្នុងពេលបន្តិចទៀត ឬអ្នកអាចប្រើមុខងារស្វែងរកដោយផ្ទាល់។"
+                ? 'សុំទោស! ខ្ញុំកំពុងមានបញ្ហាបច្ចេកទេសបន្តិច។ 😅 សូមព្យាយាមម្តងទៀតក្នុងពេលបន្តិចទៀត ឬអ្នកអាចប្រើមុខងារស្វែងរកដោយផ្ទាល់។'
                 : "Sorry! I'm experiencing a technical issue right now. 😅 Please try again in a moment, or you can use the search feature directly.",
             'suggestions' => $isKhmer
                 ? config('chatbot.default_suggestions.km')
@@ -459,7 +481,7 @@ class ChatbotService
      */
     public function findOrCreateConversation(?int $userId, ?string $sessionId, ?int $conversationId = null): ChatConversation
     {
-        // If conversation_id provided, find it
+        // 1. If conversation_id provided, find it
         if ($conversationId) {
             $conversation = ChatConversation::find($conversationId);
             if ($conversation) {
@@ -473,10 +495,28 @@ class ChatbotService
             }
         }
 
-        // Create new conversation
+        // 2. Check if a conversation already exists with this session_id
+        if ($sessionId) {
+            $existing = ChatConversation::where('session_id', $sessionId)->first();
+            if ($existing) {
+                // If the user just logged in, link user_id to the existing guest conversation
+                if ($userId && !$existing->user_id) {
+                    $existing->update(['user_id' => $userId]);
+                }
+                return $existing;
+            }
+        }
+
+        // 3. Ensure the session_id is unique before creating a new record
+        $finalSessionId = $sessionId;
+        if (!$finalSessionId || ChatConversation::where('session_id', $finalSessionId)->exists()) {
+            $finalSessionId = 'guest_' . uniqid() . '_' . bin2hex(random_bytes(4));
+        }
+
+        // 4. Create new conversation
         return ChatConversation::create([
             'user_id' => $userId,
-            'session_id' => $sessionId ?? ('guest_' . uniqid()),
+            'session_id' => $finalSessionId,
             'last_activity_at' => now(),
         ]);
     }
