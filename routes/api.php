@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Route;
 | API Routesh
 |--------------------------------------------------------------------------
 */
+
 Route::get('/health', function () {
     return response()->json([
         'message' => 'OK',
