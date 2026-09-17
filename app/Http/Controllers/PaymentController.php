@@ -100,6 +100,7 @@ class PaymentController extends Controller
 
         try {
             // Generate EMVCo KHQR code, MD5 hash, and QR image
+            $expiryMinutes = (int) config('bakong.qr_expiry_minutes', 5);
             $khqr = $this->bakongService->generateDynamicKhqr([
                 'account_id' => $receiverAccountId,
                 'merchant_name' => $merchantName,
@@ -109,9 +110,9 @@ class PaymentController extends Controller
                 'bill_number' => $billNumber,
                 'mobile_number' => $customerPhone,
                 'store_label' => 'RoomDz',
+                'expiry_minutes' => $expiryMinutes,
             ]);
 
-            $expiryMinutes = (int) config('bakong.qr_expiry_minutes', 30);
             $expiresAt = now()->addMinutes($expiryMinutes);
 
             // Store payment record in database
@@ -282,6 +283,56 @@ class PaymentController extends Controller
                 'currency' => $payment->currency,
                 'expires_at' => $payment->expires_at?->toISOString(),
                 'bakong_response' => $bakongResult['message'] ?? null,
+            ],
+        ]);
+    }
+
+    /**
+     * Simulate a successful payment completion (Useful for testing UI flow & callbacks).
+     *
+     * POST /api/payments/{id}/simulate-success
+     */
+    public function simulateSuccess(Request $request, int $id): JsonResponse
+    {
+        $payment = is_numeric($id)
+            ? Payment::with('room')->find($id)
+            : Payment::with('room')->where('bill_number', $id)->orWhere('md5', $id)->first();
+
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment record not found',
+            ], 404);
+        }
+
+        $mockHash = 'SIM-' . strtoupper(bin2hex(random_bytes(16)));
+        $payment->update([
+            'status' => 'completed',
+            'paid_at' => now(),
+            'bakong_hash' => $mockHash,
+            'payment_details' => [
+                'simulated' => true,
+                'hash' => $mockHash,
+                'fromAccountId' => 'test_payer@bakong',
+                'toAccountId' => $payment->bakong_account_id,
+                'amount' => (float) $payment->amount,
+                'currency' => $payment->currency,
+                'acknowledgedDate' => now()->toIso8601String(),
+            ],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'status' => 'completed',
+            'is_paid' => true,
+            'message' => 'Payment successfully simulated as completed!',
+            'data' => [
+                'payment_id' => $payment->id,
+                'bill_number' => $payment->bill_number,
+                'amount' => (float) $payment->amount,
+                'currency' => $payment->currency,
+                'paid_at' => $payment->paid_at?->toISOString(),
+                'bakong_hash' => $mockHash,
             ],
         ]);
     }

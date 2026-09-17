@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 use chillerlan\QRCode\QRCode;
 use chillerlan\QRCode\QROptions;
 
+use Konthaina\Khqr\KHQRGenerator;
+
 class BakongService
 {
     protected string $apiKey;
@@ -23,7 +25,7 @@ class BakongService
         $this->apiKey = config('bakong.api_key', 'cf995da6b1e04dd89f32');
         $this->apiToken = config('bakong.api_token', $this->apiKey);
         $this->baseUrl = rtrim(config('bakong.base_url', 'https://api-bakong.nbc.gov.kh/v1'), '/');
-        $this->defaultAccountId = config('bakong.account_id', 'roomdz@nbc');
+        $this->defaultAccountId = config('bakong.account_id', 'mean_chandara@bkrt');
         $this->defaultMerchantName = config('bakong.merchant_name', 'RoomDz');
         $this->defaultMerchantCity = config('bakong.merchant_city', 'Phnom Penh');
         $this->defaultCurrency = strtoupper(config('bakong.default_currency', 'USD'));
@@ -31,6 +33,7 @@ class BakongService
 
     /**
      * Generate Dynamic KHQR payload according to NBC EMVCo KHQR Standard.
+     * Includes Tag 99 with subtag 00 (creation time) and subtag 01 (expiration time).
      *
      * @param array{
      *     account_id?: string,
@@ -41,7 +44,8 @@ class BakongService
      *     bill_number?: string,
      *     mobile_number?: string,
      *     store_label?: string,
-     *     terminal_label?: string
+     *     terminal_label?: string,
+     *     expiry_minutes?: int
      * } $data
      * @return array{
      *     qr_string: string,
@@ -50,7 +54,9 @@ class BakongService
      *     bill_number: string,
      *     amount: float,
      *     currency: string,
-     *     account_id: string
+     *     account_id: string,
+     *     created_timestamp: string|null,
+     *     expiration_timestamp: string|null
      * }
      */
     public function generateDynamicKhqr(array $data): array
@@ -65,45 +71,34 @@ class BakongService
         $storeLabel = $data['store_label'] ?? 'RoomDz';
         $terminalLabel = $data['terminal_label'] ?? null;
 
-        // Currency code: 840 for USD, 116 for KHR
-        $currencyCode = ($currency === 'KHR') ? '116' : '840';
-        $formattedAmount = ($currency === 'KHR') ? (string) round($amount) : number_format($amount, 2, '.', '');
+        $expiryMinutes = (int) ($data['expiry_minutes'] ?? config('bakong.qr_expiry_minutes', 5));
+        $expirationSeconds = max(60, $expiryMinutes * 60);
 
-        // Tag 29: Merchant Account Information (Individual Bakong Account)
-        // Subtag 00: Bakong Account ID
-        $subtag00 = $this->formatTlv('00', $accountId);
-        $tag29 = $this->formatTlv('29', $subtag00);
+        $khqr = new KHQRGenerator(KHQRGenerator::MERCHANT_TYPE_INDIVIDUAL);
+        $khqr->setBakongAccountId($accountId)
+            ->setMerchantName($merchantName)
+            ->setMerchantCity($merchantCity)
+            ->setCurrency($currency)
+            ->setAmount($amount)
+            ->setExpirationDuration($expirationSeconds);
 
-        // Tag 62: Additional Data Field Template
-        $subtag62_01 = $this->formatTlv('01', $billNumber);
-        $subtag62_02 = $mobileNumber ? $this->formatTlv('02', $mobileNumber) : '';
-        $subtag62_03 = $this->formatTlv('03', $storeLabel);
-        $subtag62_07 = $terminalLabel ? $this->formatTlv('07', $terminalLabel) : '';
-        $tag62Content = $subtag62_01 . $subtag62_02 . $subtag62_03 . $subtag62_07;
-        $tag62 = $this->formatTlv('62', $tag62Content);
+        if (!empty($billNumber)) {
+            $khqr->setBillNumber($billNumber);
+        }
+        if (!empty($mobileNumber)) {
+            $khqr->setMobileNumber($mobileNumber);
+        }
+        if (!empty($storeLabel)) {
+            $khqr->setStoreLabel($storeLabel);
+        }
+        if (!empty($terminalLabel)) {
+            $khqr->setTerminalLabel($terminalLabel);
+        }
 
-        // Assemble EMVCo string payload prior to CRC
-        $payload =
-            $this->formatTlv('00', '01') .                 // Payload Format Indicator
-            $this->formatTlv('01', '12') .                 // Point of Initiation Method: 12 (Dynamic QR)
-            $tag29 .                                       // Tag 29: Bakong Account Info
-            $this->formatTlv('52', '5999') .               // Tag 52: Merchant Category Code
-            $this->formatTlv('53', $currencyCode) .        // Tag 53: Transaction Currency
-            $this->formatTlv('54', $formattedAmount) .     // Tag 54: Transaction Amount
-            $this->formatTlv('58', 'KH') .                 // Tag 58: Country Code
-            $this->formatTlv('59', $merchantName) .        // Tag 59: Merchant Name
-            $this->formatTlv('60', $merchantCity) .        // Tag 60: Merchant City
-            $tag62 .                                       // Tag 62: Additional Data Template
-            '6304';                                        // Tag 63: CRC prefix with length 04
+        $res = $khqr->generate();
+        $qrString = $res['qr'];
+        $md5 = $res['md5'];
 
-        // Compute CRC16-CCITT (0x1021, initial 0xFFFF)
-        $crc = $this->calculateCrc16($payload);
-        $qrString = $payload . $crc;
-
-        // Compute MD5 hash of the raw QR string (Used for Bakong transaction status inquiry)
-        $md5 = md5($qrString);
-
-        // Generate QR code image (Base64 Data URI)
         $qrImage = $this->renderQrCode($qrString);
 
         return [
@@ -114,6 +109,47 @@ class BakongService
             'amount' => $amount,
             'currency' => $currency,
             'account_id' => $accountId,
+            'created_timestamp' => $res['createdTimestamp'] ?? null,
+            'expiration_timestamp' => $res['expirationTimestamp'] ?? null,
+        ];
+    }
+
+    /**
+     * Generate Static KHQR payload (reusable, no expiration timestamp).
+     */
+    public function generateStaticKhqr(array $data): array
+    {
+        $accountId = $data['account_id'] ?? $this->defaultAccountId;
+        $merchantName = mb_substr($data['merchant_name'] ?? $this->defaultMerchantName, 0, 25);
+        $merchantCity = mb_substr($data['merchant_city'] ?? $this->defaultMerchantCity, 0, 15);
+        $currency = strtoupper($data['currency'] ?? $this->defaultCurrency);
+
+        $khqr = (new KHQRGenerator(KHQRGenerator::MERCHANT_TYPE_INDIVIDUAL))
+            ->setStatic(true)
+            ->setBakongAccountId($accountId)
+            ->setMerchantName($merchantName)
+            ->setMerchantCity($merchantCity)
+            ->setCurrency($currency);
+
+        if (!empty($data['store_label'])) {
+            $khqr->setStoreLabel($data['store_label']);
+        }
+
+        $res = $khqr->generate();
+        $qrString = $res['qr'];
+        $md5 = $res['md5'];
+        $qrImage = $this->renderQrCode($qrString);
+
+        return [
+            'qr_string' => $qrString,
+            'md5' => $md5,
+            'qr_image' => $qrImage,
+            'bill_number' => 'STATIC',
+            'amount' => 0.0,
+            'currency' => $currency,
+            'account_id' => $accountId,
+            'created_timestamp' => $res['createdTimestamp'] ?? null,
+            'expiration_timestamp' => null,
         ];
     }
 

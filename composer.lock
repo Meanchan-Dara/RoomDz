@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ddaff200a236e5276f61918cdc9fef42",
+    "content-hash": "34b57500b0bfa0c7a63ced45ba18f57d",
     "packages": [
         {
             "name": "brick/math",
@@ -1488,6 +1488,67 @@
                 }
             ],
             "time": "2026-07-17T13:53:03+00:00"
+        },
+        {
+            "name": "konthaina/khqr-php",
+            "version": "v1.3.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Konthaina/khqr-laravel.git",
+                "reference": "93bc2bda0890cf04f7c2cac7f8e5b5c1dded0cc7"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Konthaina/khqr-laravel/zipball/93bc2bda0890cf04f7c2cac7f8e5b5c1dded0cc7",
+                "reference": "93bc2bda0890cf04f7c2cac7f8e5b5c1dded0cc7",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/support": "^9.0 || ^10.0 || ^11.0 || ^12.0",
+                "php": ">=8.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^10.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "KHQR": "Konthaina\\Khqr\\Facades\\KHQR"
+                    },
+                    "providers": [
+                        "Konthaina\\Khqr\\KhqrServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Konthaina\\Khqr\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "KHQR / EMVCo QR payload generator for PHP (merchant presented) with CRC16 (NBC KHQR spec).",
+            "keywords": [
+                "EMVCo",
+                "bakong",
+                "cambodia",
+                "khqr",
+                "qr"
+            ],
+            "support": {
+                "issues": "https://github.com/Konthaina/khqr-laravel/issues",
+                "source": "https://github.com/Konthaina/khqr-laravel/tree/v1.3.0"
+            },
+            "funding": [
+                {
+                    "url": "https://konthaina.github.io/khqr-package-hub/#/donate",
+                    "type": "custom"
+                }
+            ],
+            "time": "2026-05-12T15:15:00+00:00"
         },
         {
             "name": "laravel/framework",
