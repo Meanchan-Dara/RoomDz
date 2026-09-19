@@ -44,7 +44,7 @@ class PaymentController extends Controller
             ], 422);
         }
 
-        $user = $request->user('sanctum');
+        $user = auth('api')->user() ?? $request->user();
         $room = null;
         $amount = $request->input('amount');
         $currency = strtoupper($request->input('currency', config('bakong.default_currency', 'USD')));
@@ -64,9 +64,17 @@ class PaymentController extends Controller
                 ], 404);
             }
 
-            // Default amount to room price if not explicitly provided
+            // Default amount & currency: if booking_deposit and deposit_price is set, use deposit_price; otherwise room price
             if (empty($amount)) {
-                $amount = (float) $room->price;
+                if ($paymentType === 'booking_deposit' && !empty($room->deposit_price) && $room->deposit_price > 0) {
+                    $amount = (float) $room->deposit_price;
+                } else {
+                    $amount = (float) $room->price;
+                }
+            }
+
+            if (!$request->filled('currency') && $paymentType === 'booking_deposit' && !empty($room->deposit_currency)) {
+                $currency = strtoupper($room->deposit_currency);
             }
 
             if (empty($description)) {
@@ -156,6 +164,7 @@ class PaymentController extends Controller
                         'id' => $room->id,
                         'name' => $room->name,
                         'price' => (float) $room->price,
+                        'deposit_price' => !is_null($room->deposit_price) ? (float) $room->deposit_price : null,
                         'price_period' => $room->price_period,
                         'image' => $room->image,
                     ] : null,
@@ -399,7 +408,7 @@ class PaymentController extends Controller
     {
         $user = $request->user();
 
-        $query = Payment::with('room');
+        $query = Payment::with(['room.detail', 'user']);
 
         // If owner or admin, can see all or own rooms' payments; regular users see their own
         if ($user->role && in_array($user->role->name, ['admin', 'owner'])) {

@@ -66,12 +66,14 @@ class GoogleController extends Controller
                 ]
             );
 
-            $authToken = $user->createToken('auth_token')->plainTextToken;
+            $authToken = auth('api')->login($user);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Google authentication successful',
                 'token' => $authToken,
+                'token_type' => 'bearer',
+                'expires_in' => auth('api')->factory()->getTTL() * 60,
                 'user' => $user,
             ], 200);
 

@@ -16,8 +16,8 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             CategorySeeder::class,
             RoomSeeder::class,
+            NewOwnerWithThreeRoomsSeeder::class,
+            TestRoom100RielSeeder::class,
         ]);
-
-        
     }
 }

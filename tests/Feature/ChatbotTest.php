@@ -46,7 +46,7 @@ class ChatbotTest extends TestCase
             'content' => 'Find me a room under $200',
         ]);
 
-        $token = $user->createToken('auth')->plainTextToken;
+        $token = auth('api')->login($user);
 
         // Test GET /api/chatbot/conversations (where the LengthAwarePaginator::map bug happened)
         $response = $this->withHeader('Authorization', "Bearer {$token}")

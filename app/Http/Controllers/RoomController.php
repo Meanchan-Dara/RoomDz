@@ -172,7 +172,7 @@ class RoomController extends Controller
             $galleryUrls = [$mainImageUrl];
         }
 
-        $userId = $request->user('sanctum')?->id ?? $request->user()?->id ?? ($validated['user_id'] ?? null);
+        $userId = auth('api')->user()?->id ?? $request->user()?->id ?? ($validated['user_id'] ?? null);
         $totalUnits = isset($validated['total_units']) ? (int) $validated['total_units'] : 1;
         $availableUnits = isset($validated['available_units']) ? (int) $validated['available_units'] : $totalUnits;
 
@@ -401,7 +401,7 @@ class RoomController extends Controller
 
         $viewingRequest = ViewingRequest::create([
             'room_id' => $room->id,
-            'user_id' => $request->user('sanctum')?->id ?? $request->user()?->id,
+            'user_id' => auth('api')->user()?->id ?? $request->user()?->id,
             'name' => $validated['name'],
             'phone' => $validated['phone'],
             'email' => $validated['email'] ?? null,

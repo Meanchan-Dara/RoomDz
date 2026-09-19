@@ -12,7 +12,12 @@ return [
 
     'gemini' => [
         'api_key' => env('GEMINI_API_KEY'),
-        'model' => env('CHATBOT_MODEL', 'gemini-3.6-flash'),
+        'model' => env('CHATBOT_MODEL', 'gemini-flash-lite-latest'),
+        'fallback_models' => [
+            'gemini-3.5-flash-lite',
+            'gemini-3.6-flash',
+            'gemini-flash-latest',
+        ],
         'endpoint' => 'https://generativelanguage.googleapis.com/v1beta/models/',
     ],
 

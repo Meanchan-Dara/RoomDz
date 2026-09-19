@@ -40,8 +40,12 @@ class OwnerRoomController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Room::with(['category', 'user', 'detail'])
-            ->where('user_id', $request->user()->id);
+        $query = Room::with([
+            'category',
+            'user',
+            'detail',
+            'payments' => fn($q) => $q->where('status', 'completed')->where('payment_type', 'booking_deposit')->latest(),
+        ])->where('user_id', $request->user()->id);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -88,6 +92,7 @@ class OwnerRoomController extends Controller
             'name' => 'required|string|max:255',
             'type' => 'nullable|string|max:100',
             'price' => 'required|numeric|min:0',
+            'deposit_price' => 'nullable|numeric|min:0',
             'price_period' => 'nullable|string|max:50',
             'status' => 'nullable|string|max:50',
             'total_units' => 'nullable|integer|min:1',
@@ -140,7 +145,11 @@ class OwnerRoomController extends Controller
         // Handle gallery images
         $galleryUrls = [];
         if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $file) {
+            $files = $request->file('images');
+            if (!is_array($files)) {
+                $files = [$files];
+            }
+            foreach ($files as $file) {
                 if ($file && $file->isValid()) {
                     $galleryUrls[] = $this->uploadImageFile($file, 'rooms');
                 }
@@ -167,6 +176,7 @@ class OwnerRoomController extends Controller
                 'name' => $validated['name'],
                 'type' => $validated['type'] ?? 'Private Room',
                 'price' => $validated['price'],
+                'deposit_price' => $validated['deposit_price'] ?? null,
                 'price_period' => $validated['price_period'] ?? 'month',
                 'status' => $validated['status'] ?? ($availableUnits > 0 ? 'AVAILABLE NOW' : 'OCCUPIED'),
                 'total_units' => $totalUnits,
@@ -237,6 +247,7 @@ class OwnerRoomController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'type' => 'nullable|string|max:100',
             'price' => 'sometimes|required|numeric|min:0',
+            'deposit_price' => 'nullable|numeric|min:0',
             'price_period' => 'nullable|string|max:50',
             'status' => 'nullable|string|max:50',
             'total_units' => 'nullable|integer|min:1',
@@ -288,7 +299,11 @@ class OwnerRoomController extends Controller
         $galleryUrls = $room->detail?->images ?? [];
         if ($request->hasFile('images')) {
             $uploadedGallery = [];
-            foreach ($request->file('images') as $file) {
+            $files = $request->file('images');
+            if (!is_array($files)) {
+                $files = [$files];
+            }
+            foreach ($files as $file) {
                 if ($file && $file->isValid()) {
                     $uploadedGallery[] = $this->uploadImageFile($file, 'rooms');
                 }
@@ -309,6 +324,7 @@ class OwnerRoomController extends Controller
                 'name' => $validated['name'] ?? null,
                 'type' => $validated['type'] ?? null,
                 'price' => $validated['price'] ?? null,
+                'deposit_price' => array_key_exists('deposit_price', $validated) ? $validated['deposit_price'] : null,
                 'price_period' => $validated['price_period'] ?? null,
                 'status' => $validated['status'] ?? null,
                 'total_units' => array_key_exists('total_units', $validated) ? (int) $validated['total_units'] : null,
@@ -322,7 +338,7 @@ class OwnerRoomController extends Controller
                 'latitude' => $validated['latitude'] ?? null,
                 'longitude' => $validated['longitude'] ?? null,
                 'image' => $mainImageUrl,
-            ], fn ($val) => !is_null($val)));
+            ], fn($val) => !is_null($val)));
 
             $detailData = array_filter([
                 'description' => $validated['description'] ?? null,
@@ -341,7 +357,7 @@ class OwnerRoomController extends Controller
                 'contact_info' => array_key_exists('contact_info', $validated) ? $parseJsonField($validated['contact_info']) : null,
                 'latitude' => $validated['latitude'] ?? null,
                 'longitude' => $validated['longitude'] ?? null,
-            ], fn ($val) => !is_null($val));
+            ], fn($val) => !is_null($val));
 
             if (!empty($detailData)) {
                 $room->detail()->updateOrCreate(

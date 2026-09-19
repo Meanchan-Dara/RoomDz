@@ -14,6 +14,8 @@ class ChatbotService
 
     private string $model;
 
+    private array $fallbackModels;
+
     private string $endpoint;
 
     private string $systemPrompt;
@@ -25,7 +27,8 @@ class ChatbotService
     public function __construct()
     {
         $this->apiKey = (string) (config('chatbot.gemini.api_key') ?? '');
-        $this->model = (string) (config('chatbot.gemini.model') ?? 'gemini-2.0-flash');
+        $this->model = (string) (config('chatbot.gemini.model') ?? 'gemini-flash-lite-latest');
+        $this->fallbackModels = (array) (config('chatbot.gemini.fallback_models') ?? ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-flash-latest']);
         $this->endpoint = (string) (config('chatbot.gemini.endpoint') ?? 'https://generativelanguage.googleapis.com/v1beta/models');
         $this->systemPrompt = (string) (config('chatbot.system_prompt') ?? '');
         $this->maxHistory = (int) (config('chatbot.max_history') ?? 10);
@@ -103,70 +106,105 @@ class ChatbotService
      */
     private function callGeminiAI(string $userMessage, array $history): array
     {
-        try {
-            $contents = [];
+        $contents = [];
 
-            // Add conversation history
-            foreach ($history as $msg) {
-                $contents[] = [
-                    'role' => $msg['role'] === 'assistant' ? 'model' : 'user',
-                    'parts' => [['text' => $msg['content']]],
-                ];
+        // Add conversation history
+        foreach ($history as $msg) {
+            $contents[] = [
+                'role' => $msg['role'] === 'assistant' ? 'model' : 'user',
+                'parts' => [['text' => $msg['content']]],
+            ];
+        }
+
+        // Add current user message
+        $contents[] = [
+            'role' => 'user',
+            'parts' => [['text' => $userMessage]],
+        ];
+
+        $payload = [
+            'system_instruction' => [
+                'parts' => [['text' => $this->systemPrompt]],
+            ],
+            'contents' => $contents,
+            'generationConfig' => [
+                'temperature' => 0.7,
+                'topP' => 0.95,
+                'maxOutputTokens' => 1024,
+                'responseMimeType' => 'application/json',
+            ],
+        ];
+
+        $result = $this->executeGeminiRequest($payload);
+
+        if ($result !== null) {
+            if (isset($result['intent'])) {
+                return $result;
             }
 
-            // Add current user message
-            $contents[] = [
-                'role' => 'user',
-                'parts' => [['text' => $userMessage]],
-            ];
-
-            $url = $this->geminiUrl();
-
-            $response = Http::timeout(30)->post($url, [
-                'system_instruction' => [
-                    'parts' => [['text' => $this->systemPrompt]],
-                ],
-                'contents' => $contents,
-                'generationConfig' => [
-                    'temperature' => 0.7,
-                    'topP' => 0.95,
-                    'maxOutputTokens' => 1024,
-                    'responseMimeType' => 'application/json',
-                ],
-            ]);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
-
-                // Parse JSON response from AI
-                $parsed = json_decode($text, true);
-                if (json_last_error() === JSON_ERROR_NONE && isset($parsed['intent'])) {
-                    return $parsed;
-                }
-
-                // If AI didn't return proper JSON, wrap it
+            if (isset($result['raw_text'])) {
                 return [
                     'intent' => 'general',
                     'filters' => null,
-                    'reply' => $text ?: 'ខ្ញុំមិនយល់សំណួររបស់អ្នកទេ។ សូមសួរម្តងទៀត! 😊',
-                    'suggestions' => config('chatbot.default_suggestions.km'),
+                    'reply' => $result['raw_text'],
+                    'suggestions' => $this->getDefaultSuggestions($this->isKhmerText($userMessage) ? 'km' : 'en'),
                 ];
             }
-
-            Log::error('Gemini API error', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-
-            return $this->getFallbackResponse($userMessage);
-        } catch (\Throwable $e) {
-            Log::error('Chatbot AI error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return $this->getFallbackResponse($userMessage);
         }
+
+        // If all AI models failed, use smart local fallback to parse intent & search DB
+        return $this->smartLocalFallback($userMessage);
+    }
+
+    /**
+     * Execute Gemini API request with fallback models and retry on transient errors.
+     */
+    private function executeGeminiRequest(array $payload, int $timeout = 15): ?array
+    {
+        $modelsToTry = array_values(array_unique(array_filter(array_merge([$this->model], $this->fallbackModels))));
+
+        foreach ($modelsToTry as $model) {
+            $url = rtrim($this->endpoint, '/') . '/' . ltrim($model, '/') . ':generateContent?key=' . $this->apiKey;
+
+            for ($attempt = 1; $attempt <= 2; $attempt++) {
+                try {
+                    $response = Http::timeout($timeout)->post($url, $payload);
+
+                    if ($response->successful()) {
+                        $data = $response->json();
+                        $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
+                        $parsed = json_decode($text, true);
+
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($parsed)) {
+                            return $parsed;
+                        }
+
+                        if (! empty($text)) {
+                            return ['raw_text' => $text];
+                        }
+                    }
+
+                    $status = $response->status();
+                    Log::warning("Gemini model {$model} returned HTTP {$status} (attempt {$attempt})", [
+                        'body' => mb_substr($response->body(), 0, 300),
+                    ]);
+
+                    // Transient errors (503 Service Unavailable / high demand, 429 Rate Limit)
+                    if ($status === 503 || $status === 429) {
+                        usleep(300000); // 300ms pause before retry or next model
+                        continue;
+                    }
+
+                    // For client/not found errors (e.g. 404), move to next model immediately
+                    break;
+                } catch (\Throwable $e) {
+                    Log::warning("Gemini request exception for model {$model}: " . $e->getMessage());
+                    usleep(300000);
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -200,9 +238,7 @@ class ChatbotService
                 'parts' => [['text' => $enhancePrompt]],
             ];
 
-            $url = $this->geminiUrl();
-
-            $response = Http::timeout(30)->post($url, [
+            $payload = [
                 'system_instruction' => [
                     'parts' => [['text' => $this->systemPrompt]],
                 ],
@@ -213,26 +249,35 @@ class ChatbotService
                     'maxOutputTokens' => 1024,
                     'responseMimeType' => 'application/json',
                 ],
-            ]);
+            ];
 
-            if ($response->successful()) {
-                $data = $response->json();
-                $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
-                $parsed = json_decode($text, true);
+            $parsed = $this->executeGeminiRequest($payload, 10);
+            if ($parsed && isset($parsed['reply'])) {
+                $parsed['intent'] = 'search_room';
+                $parsed['filters'] = $aiResult['filters'];
 
-                if (json_last_error() === JSON_ERROR_NONE && isset($parsed['reply'])) {
-                    $parsed['intent'] = 'search_room';
-                    $parsed['filters'] = $aiResult['filters'];
-
-                    return $parsed;
-                }
+                return $parsed;
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to enhance response: ' . $e->getMessage());
+            Log::warning('Failed to enhance response with AI: ' . $e->getMessage());
         }
 
-        // Fallback: use the original AI result
-        return $aiResult;
+        // Graceful fallback: synthesize a friendly room reply without technical error
+        $count = count($rooms);
+        $isKhmer = $this->isKhmerText($userMessage);
+        $loc = ! empty($aiResult['filters']['location']) ? " នៅ {$aiResult['filters']['location']}" : '';
+        $locEn = ! empty($aiResult['filters']['location']) ? " in {$aiResult['filters']['location']}" : '';
+
+        $reply = $isKhmer
+            ? "ខ្ញុំបានរកឃើញបន្ទប់ចំនួន {$count} ដែលស័ក្តិសមសម្រាប់អ្នក{$loc}! 🏠✨"
+            : "Here are {$count} great available options{$locEn} for you! 🏠✨";
+
+        return [
+            'intent' => 'search_room',
+            'filters' => $aiResult['filters'] ?? null,
+            'reply' => $reply,
+            'suggestions' => $this->getDefaultSuggestions($isKhmer ? 'km' : 'en'),
+        ];
     }
 
     /**
@@ -278,10 +323,15 @@ class ChatbotService
             $query->where('price', '>=', (float) $filters['min_price']);
         }
 
-        // Location filter (search in address)
+        // Location filter (search in address with common location variations)
         if (! empty($filters['location'])) {
             $location = $filters['location'];
-            $query->where('address', $like, "%{$location}%");
+            $locVariations = $this->getLocationVariations($location);
+            $query->where(function ($q) use ($locVariations, $like) {
+                foreach ($locVariations as $var) {
+                    $q->orWhere('address', $like, "%{$var}%");
+                }
+            });
         }
 
         // Type filter
@@ -307,12 +357,21 @@ class ChatbotService
             $query->where('status', $like, "%{$filters['status']}%");
         }
 
-        // Facilities filter (search in room detail)
+        // Facilities filter (search in room detail with cross-platform JSON support)
         if (! empty($filters['facilities']) && is_array($filters['facilities'])) {
+            $isPgsql = DB::connection()->getDriverName() === 'pgsql';
             foreach ($filters['facilities'] as $facility) {
-                $query->whereHas('detail', function ($q) use ($facility, $like) {
-                    $q->whereJsonContains('facilities', $facility)
-                        ->orWhere('facilities', $like, "%{$facility}%");
+                $terms = $this->getFacilitySearchTerms($facility);
+                $query->whereHas('detail', function ($q) use ($terms, $like, $isPgsql) {
+                    $q->where(function ($subQ) use ($terms, $like, $isPgsql) {
+                        foreach ($terms as $term) {
+                            if ($isPgsql) {
+                                $subQ->orWhereRaw('CAST(facilities AS TEXT) ILIKE ?', [$term]);
+                            } else {
+                                $subQ->orWhere('facilities', $like, $term);
+                            }
+                        }
+                    });
                 });
             }
         }
@@ -458,22 +517,184 @@ class ChatbotService
     }
 
     /**
-     * Fallback response when AI is unavailable.
+     * Smart local fallback to parse search intent and filters when AI is unavailable.
      */
-    private function getFallbackResponse(string $userMessage): array
+    private function smartLocalFallback(string $userMessage): array
     {
         $isKhmer = $this->isKhmerText($userMessage);
+        $lower = mb_strtolower($userMessage);
 
+        // Check if message is a simple greeting
+        if (preg_match('/^(hi|hello|hey|greetings|help|សួស្តី|ជំរាបសួរ)\b/iu', trim($userMessage))) {
+            return [
+                'intent' => 'general',
+                'filters' => null,
+                'reply' => $isKhmer
+                    ? "ស្វាគមន៍មកកាន់ RoomDz! 🏠✨ តើខ្ញុំអាចជួយអ្នកស្វែងរកបន្ទប់បែបណាដែរ?"
+                    : "Welcome to RoomDz! 🏠✨ How can I help you find your ideal room today?",
+                'suggestions' => $this->getDefaultSuggestions($isKhmer ? 'km' : 'en'),
+            ];
+        }
+
+        // Price extraction
+        $maxPrice = null;
+        $minPrice = null;
+        if (preg_match('/(?:under|below|less\s+than|ក្រោម|<)\s*\$?(\d+)/i', $userMessage, $m)) {
+            $maxPrice = (float) $m[1];
+        } elseif (preg_match('/(?:over|above|more\s+than|លើស|លើសពី|>)\s*\$?(\d+)/i', $userMessage, $m)) {
+            $minPrice = (float) $m[1];
+        } elseif (preg_match('/(?:between|ចន្លោះពី)\s*\$?(\d+)\s*(?:and|to|ដល់|-)\s*\$?(\d+)/i', $userMessage, $m)) {
+            $minPrice = (float) $m[1];
+            $maxPrice = (float) $m[2];
+        } elseif (preg_match('/\$(\d+)/', $userMessage, $m)) {
+            $maxPrice = (float) $m[1];
+        }
+
+        // Location extraction
+        $location = null;
+        if (preg_match('/(bkk1?|bkk2?|bkk3?|boeung\s*keng\s*kang|បឹងកេងកង)/i', $lower)) {
+            $location = 'BKK';
+        } elseif (preg_match('/(toul\s*kork|tuol\s*kork|ទួលគោក)/i', $lower)) {
+            $location = 'Toul Kork';
+        } elseif (preg_match('/(tuol\s*tompoung|toul\s*tompoung|russian\s*market|ទួលទំពូង)/i', $lower)) {
+            $location = 'Tuol Tompoung';
+        } elseif (preg_match('/(daun\s*penh|doun\s*penh|ដូនពេញ)/i', $lower)) {
+            $location = 'Daun Penh';
+        } elseif (preg_match('/(chamkarmon|chamkar\s*mon|ចំការមន)/i', $lower)) {
+            $location = 'Chamkarmon';
+        } elseif (preg_match('/(sen\s*sok|សែនសុខ)/i', $lower)) {
+            $location = 'Sen Sok';
+        } elseif (preg_match('/(chbar\s*ampov|ច្បារអំពៅ)/i', $lower)) {
+            $location = 'Chbar Ampov';
+        } elseif (preg_match('/(7\s*makara|prampi\s*makara|៧មករា)/i', $lower)) {
+            $location = '7 Makara';
+        }
+
+        // Facilities extraction
+        $facilities = [];
+        if (preg_match('/(wifi|wi-fi|internet|វ៉ាយហ្វាយ)/i', $lower)) {
+            $facilities[] = 'WiFi';
+        }
+        if (preg_match('/(a[\/\.]?c|air\s*con|air\s*conditioning|ម៉ាស៊ីនត្រជាក់)/i', $lower)) {
+            $facilities[] = 'AC';
+        }
+        if (preg_match('/(parking|park|ចំណត|ចំណតឡាន)/i', $lower)) {
+            $facilities[] = 'Parking';
+        }
+        if (preg_match('/(elevator|lift|ជណ្តើរយន្ត)/i', $lower)) {
+            $facilities[] = 'Elevator';
+        }
+        if (preg_match('/(balcony|យ៉រ)/i', $lower)) {
+            $facilities[] = 'Balcony';
+        }
+        if (preg_match('/(gym|fitness|ហាត់ប្រាណ)/i', $lower)) {
+            $facilities[] = 'Gym';
+        }
+        if (preg_match('/(pool|swimming\s*pool|អាងហែលទឹក)/i', $lower)) {
+            $facilities[] = 'Pool';
+        }
+
+        // Sorting
+        $sort = 'created_at';
+        $order = 'desc';
+        if (preg_match('/(cheap|cheapest|low\s*price|ថោក|ថោកបំផុត)/i', $lower)) {
+            $sort = 'price';
+            $order = 'asc';
+        } elseif (preg_match('/(best|top|rating|popular|ល្អបំផុត)/i', $lower)) {
+            $sort = 'rating';
+            $order = 'desc';
+        }
+
+        // Check if query is looking for rooms
+        $isRoomSearch = ! empty($location) || ! empty($facilities) || $maxPrice !== null || $minPrice !== null || preg_match('/(room|rooms|studio|apartment|house|បន្ទប់|ផ្ទះ)/i', $lower);
+
+        if ($isRoomSearch) {
+            return [
+                'intent' => 'search_room',
+                'filters' => [
+                    'max_price' => $maxPrice,
+                    'min_price' => $minPrice,
+                    'location' => $location,
+                    'type' => null,
+                    'facilities' => $facilities,
+                    'status' => 'AVAILABLE NOW',
+                    'category' => null,
+                    'sort' => $sort,
+                    'order' => $order,
+                ],
+                'reply' => $isKhmer
+                    ? 'ខ្ញុំកំពុងស្វែងរកបន្ទប់ដែលស័ក្តិសមសម្រាប់អ្នក... 🏠✨'
+                    : 'Searching available rooms matching your request... 🏠✨',
+                'suggestions' => $this->getDefaultSuggestions($isKhmer ? 'km' : 'en'),
+            ];
+        }
+
+        // Default friendly fallback
         return [
             'intent' => 'general',
             'filters' => null,
             'reply' => $isKhmer
-                ? 'សុំទោស! ខ្ញុំកំពុងមានបញ្ហាបច្ចេកទេសបន្តិច។ 😅 សូមព្យាយាមម្តងទៀតក្នុងពេលបន្តិចទៀត ឬអ្នកអាចប្រើមុខងារស្វែងរកដោយផ្ទាល់។'
-                : "Sorry! I'm experiencing a technical issue right now. 😅 Please try again in a moment, or you can use the search feature directly.",
-            'suggestions' => $isKhmer
-                ? config('chatbot.default_suggestions.km')
-                : config('chatbot.default_suggestions.en'),
+                ? 'តើអ្នកចង់ស្វែងរកបន្ទប់បែបណាដែរ? អ្នកអាចសួរអំពីទីតាំង (ឧ. Toul Kork, BKK), តម្លៃ (ឧ. ក្រោម $200), ឬឧបករណ៍ប្រើប្រាស់ (ឧ. មាន WiFi, AC)! 🏠✨'
+                : "What kind of room are you looking for? You can ask by location (e.g. Toul Kork, BKK), price (e.g. under $200), or amenities (e.g. with WiFi, AC)! 🏠✨",
+            'suggestions' => $this->getDefaultSuggestions($isKhmer ? 'km' : 'en'),
         ];
+    }
+
+    /**
+     * Get variations for location search in Cambodia.
+     */
+    private function getLocationVariations(string $location): array
+    {
+        $loc = trim($location);
+        $variations = [$loc];
+
+        if (stripos($loc, 'BKK') !== false || stripos($loc, 'Boeung Keng Kang') !== false) {
+            return ['BKK', 'Boeung Keng Kang', 'បឹងកេងកង'];
+        }
+        if (stripos($loc, 'Toul Kork') !== false || stripos($loc, 'Tuol Kork') !== false) {
+            return ['Toul Kork', 'Tuol Kork', 'ទួលគោក'];
+        }
+        if (stripos($loc, 'Tuol Tompoung') !== false || stripos($loc, 'Toul Tompoung') !== false || stripos($loc, 'Russian Market') !== false) {
+            return ['Tuol Tompoung', 'Toul Tompoung', 'Russian Market', 'ទួលទំពូង'];
+        }
+        if (stripos($loc, 'Daun Penh') !== false || stripos($loc, 'Doun Penh') !== false) {
+            return ['Daun Penh', 'Doun Penh', 'ដូនពេញ'];
+        }
+
+        return $variations;
+    }
+
+    /**
+     * Get search term variations for facilities.
+     */
+    private function getFacilitySearchTerms(string $facility): array
+    {
+        $clean = strtolower(trim($facility));
+        $normalized = str_replace(['-', ' ', '_', '/'], '', $clean);
+
+        if (in_array($normalized, ['wifi', 'internet', 'freewifi'])) {
+            return ['%wi-fi%', '%wifi%', '%internet%'];
+        }
+        if (in_array($normalized, ['ac', 'aircon', 'aircondition', 'airconditioner'])) {
+            return ['%a/c%', '%ac%', '%air%'];
+        }
+        if (in_array($normalized, ['parking', 'park', 'motorbikeparking', 'carparking'])) {
+            return ['%parking%', '%park%'];
+        }
+        if (in_array($normalized, ['gym', 'fitness'])) {
+            return ['%gym%', '%fitness%'];
+        }
+        if (in_array($normalized, ['pool', 'swimmingpool'])) {
+            return ['%pool%'];
+        }
+        if (in_array($normalized, ['elevator', 'lift'])) {
+            return ['%elevator%', '%lift%'];
+        }
+        if (in_array($normalized, ['balcony', 'terrace'])) {
+            return ['%balcony%', '%terrace%'];
+        }
+
+        return ["%{$clean}%"];
     }
 
     /**

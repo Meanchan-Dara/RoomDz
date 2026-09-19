@@ -49,15 +49,16 @@ Route::get('/auth/google', [GoogleController::class, 'redirect']);
 Route::get('/auth/google/callback', [GoogleController::class, 'callback']);
 
 // Protected Routes
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:api')->group(function () {
     // Auth
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/refresh', [AuthController::class, 'refresh']);
     Route::get('/profile', [AuthController::class, 'profile']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/profile', [AuthController::class, 'updateProfile']); // For multipart/form-data (avatar upload)
     Route::put('/change-password', [AuthController::class, 'changePassword']);
     Route::get('/user', function (Request $request) {
-        return $request->user();
+        return response()->json($request->user());
     });
 
     // Favorites
@@ -96,7 +97,7 @@ Route::delete('/category/{id}', [CategoryController::class, 'destroy']);
 Route::get('/roles', [RoleController::class, 'index']);
 
 // Owner Protected Routes (Owner & Admin)
-Route::middleware(['auth:sanctum', 'role:owner,admin'])->prefix('owner')->group(function () {
+Route::middleware(['auth:api', 'role:owner,admin'])->prefix('owner')->group(function () {
     // Dashboard Stats
     Route::get('/dashboard', [OwnerDashboardController::class, 'index']);
 
@@ -122,7 +123,7 @@ Route::post('/chatbot/message', [ChatbotController::class, 'sendMessage']);
 Route::post('/chatbot/suggestions', [ChatbotController::class, 'suggestions']);
 
 // AI Chatbot History (Authenticated users only)
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:api')->group(function () {
     Route::get('/chatbot/conversations', [ChatbotController::class, 'conversations']);
     Route::get('/chatbot/conversations/{id}', [ChatbotController::class, 'history']);
     Route::delete('/chatbot/conversations/{id}', [ChatbotController::class, 'deleteConversation']);

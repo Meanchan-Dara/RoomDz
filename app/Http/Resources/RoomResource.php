@@ -25,7 +25,7 @@ class RoomResource extends JsonResource
 
         // Check if the authenticated user has favorited this room
         $isFavorite = false;
-        $user = $request->user('sanctum');
+        $user = auth('api')->user() ?? $request->user();
         if ($user) {
             $isFavorite = $this->favorites()->where('user_id', $user->id)->exists();
         }
@@ -49,11 +49,15 @@ class RoomResource extends JsonResource
                 'is_verified' => (bool) $this->user->is_verified,
                 'location_tag' => $this->user->location_tag,
                 'telegram' => $this->user->telegram,
+                'bakong_account_id' => $this->user->bakong_account_id,
+                'bakong_merchant_name' => $this->user->bakong_merchant_name,
             ] : null,
             'name' => $this->name,
             'type' => $this->type,
             'price' => (float) $this->price,
             'price_period' => $this->price_period,
+            'deposit_price' => !is_null($this->deposit_price) ? (float) $this->deposit_price : null,
+            'deposit_currency' => $this->deposit_currency ?? 'USD',
             'is_negotiable' => (bool) $this->is_negotiable,
             'is_featured' => (bool) $this->is_featured,
             'listing_type' => $this->listing_type ?? 'standard',
@@ -68,9 +72,14 @@ class RoomResource extends JsonResource
             'is_favorite' => $isFavorite,
             'latitude' => !is_null($this->latitude) ? (float) $this->latitude : ($this->relationLoaded('detail') && $this->detail ? (float) $this->detail->latitude : null),
             'longitude' => !is_null($this->longitude) ? (float) $this->longitude : ($this->relationLoaded('detail') && $this->detail ? (float) $this->detail->longitude : null),
+            'latest_booking' => ($this->relationLoaded('payments') && $this->payments->isNotEmpty()) ? [
+                'customer_name' => $this->payments->first()->customer_name,
+                'customer_phone' => $this->payments->first()->customer_phone,
+                'amount' => (float) $this->payments->first()->amount,
+                'paid_at' => $this->payments->first()->paid_at?->toISOString(),
+            ] : null,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
     }
 }
-

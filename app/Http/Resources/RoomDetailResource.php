@@ -49,7 +49,7 @@ class RoomDetailResource extends JsonResource
 
         // Check if the authenticated user has favorited this room
         $isFavorite = false;
-        $user = $request->user('sanctum');
+        $user = auth('api')->user() ?? $request->user();
         if ($user) {
             $isFavorite = $this->favorites()->where('user_id', $user->id)->exists();
         }
@@ -84,6 +84,8 @@ class RoomDetailResource extends JsonResource
             'is_available' => (bool) (($this->available_units ?? 1) > 0),
             'price' => (float) $this->price,
             'price_period' => $this->price_period,
+            'deposit_price' => !is_null($this->deposit_price) ? (float) $this->deposit_price : null,
+            'deposit_currency' => $this->deposit_currency ?? 'USD',
             'is_negotiable' => (bool) $this->is_negotiable,
             'is_featured' => (bool) $this->is_featured,
             'listing_type' => $this->listing_type ?? 'standard',

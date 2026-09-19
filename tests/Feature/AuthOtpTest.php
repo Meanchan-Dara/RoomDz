@@ -168,7 +168,7 @@ class AuthOtpTest extends TestCase
             ['email' => $this->testEmail],
             ['name' => 'Meanchan Dara', 'password' => bcrypt($this->testPassword)]
         );
-        $token = $user->createToken('test_token')->plainTextToken;
+        $token = auth('api')->login($user);
 
         // GET /api/user
         $userResp = $this->withHeader('Authorization', "Bearer {$token}")->getJson('/api/user');

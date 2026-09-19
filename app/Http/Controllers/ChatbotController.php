@@ -30,7 +30,7 @@ class ChatbotController extends Controller
             'session_id' => 'nullable|string|max:255',
         ]);
 
-        $userId = $request->user('sanctum')?->id;
+        $userId = auth('api')->user()?->id ?? $request->user()?->id;
         $sessionId = $validated['session_id'] ?? $request->header('X-Session-Id') ?? null;
 
         // Ensure we have either a user or a session
@@ -84,7 +84,7 @@ class ChatbotController extends Controller
      */
     public function conversations(Request $request): JsonResponse
     {
-        $user = $request->user('sanctum');
+        $user = auth('api')->user() ?? $request->user();
 
         $conversations = ChatConversation::where('user_id', $user->id)
             ->with('latestMessage')
@@ -122,7 +122,7 @@ class ChatbotController extends Controller
      */
     public function history(Request $request, string $id): JsonResponse
     {
-        $user = $request->user('sanctum');
+        $user = auth('api')->user() ?? $request->user();
 
         $conversation = ChatConversation::where('id', $id)
             ->where('user_id', $user->id)
@@ -157,7 +157,7 @@ class ChatbotController extends Controller
      */
     public function deleteConversation(Request $request, string $id): JsonResponse
     {
-        $user = $request->user('sanctum');
+        $user = auth('api')->user() ?? $request->user();
 
         $conversation = ChatConversation::where('id', $id)
             ->where('user_id', $user->id)

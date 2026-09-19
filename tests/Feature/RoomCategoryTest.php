@@ -58,7 +58,7 @@ class RoomCategoryTest extends TestCase
         ]);
 
         // 3. Create room with details
-        $token = $landlord->createToken('auth')->plainTextToken;
+        $token = auth('api')->login($landlord);
 
         $roomPayload = [
             'category_id' => $category->id,
@@ -129,7 +129,7 @@ class RoomCategoryTest extends TestCase
         ]);
 
         $category = Category::firstOrCreate(['name' => 'Standard Room', 'slug' => 'standard-room']);
-        $token = $owner->createToken('auth')->plainTextToken;
+        $token = auth('api')->login($owner);
 
         // Create 1 listing representing 10 identical rooms, 8 available (2 occupied)
         $response = $this->withHeader('Authorization', "Bearer {$token}")

@@ -70,6 +70,14 @@ class AllEndpointsTest extends TestCase
         $this->assertEquals('@ocean_owner_kh', $updateProf->json('user.telegram'));
         echo "\n[PASS] PUT /api/profile (telegram updated) -> 200";
 
+        // 5c. Refresh Token
+        $refresh = $this->withHeader('Authorization', "Bearer {$authToken}")
+            ->postJson('/api/refresh');
+        $refresh->assertStatus(200);
+        $this->assertNotNull($refresh->json('token'));
+        $authToken = $refresh->json('token');
+        echo "\n[PASS] POST /api/refresh -> 200";
+
         // 6. Auth User
         $userResp = $this->withHeader('Authorization', "Bearer {$authToken}")
             ->getJson('/api/user');

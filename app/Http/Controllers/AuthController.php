@@ -61,11 +61,13 @@ class AuthController extends Controller
 
         $user->load('role');
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $token = auth('api')->login($user);
 
         return response()->json([
             'message' => 'User registered successfully',
             'token' => $token,
+            'token_type' => 'bearer',
+            'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => $user,
         ], 201);
     }
@@ -77,32 +79,31 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        if (!Auth::attempt($credentials)) {
+        if (!$token = auth('api')->attempt($credentials)) {
             return response()->json([
                 'message' => 'Invalid email or password',
             ], 401);
         }
 
         /** @var User $user */
-        $user = Auth::user();
+        $user = auth('api')->user();
         $user->load('role');
-        $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'message' => 'Login successful',
             'token' => $token,
+            'token_type' => 'bearer',
+            'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => $user,
         ], 200);
     }
 
     public function logout(Request $request)
     {
-        $user = $request->user();
-        if ($user) {
-            $token = $user->currentAccessToken();
-            if ($token && method_exists($token, 'delete')) {
-                $token->delete();
-            }
+        try {
+            auth('api')->logout();
+        } catch (\Throwable $e) {
+            // In case token is already invalid/expired
         }
 
         return response()->json([
@@ -111,12 +112,44 @@ class AuthController extends Controller
     }
 
     /**
+     * Refresh an authenticated JWT token.
+     */
+    public function refresh(): JsonResponse
+    {
+        try {
+            $token = auth('api')->refresh();
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Token could not be refreshed',
+                'error' => $e->getMessage(),
+            ], 401);
+        }
+
+        /** @var User $user */
+        $user = auth('api')->user();
+        if ($user) {
+            $user->load('role');
+        }
+
+        return response()->json([
+            'message' => 'Token refreshed successfully',
+            'token' => $token,
+            'token_type' => 'bearer',
+            'expires_in' => auth('api')->factory()->getTTL() * 60,
+            'user' => $user,
+        ], 200);
+    }
+
+    /**
      * Get the authenticated user's profile with stats counters.
      */
     public function profile(Request $request): JsonResponse
     {
-        /** @var User $user */
-        $user = $request->user();
+        /** @var User|null $user */
+        $user = auth('api')->user() ?? $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
         $user->load('role');
 
         $formatUrl = function ($url) {
@@ -126,6 +159,21 @@ class AuthController extends Controller
             }
             return url(ltrim($url, '/'));
         };
+
+        $isOwner = $user->role?->name === 'owner';
+        $savedCount = $user->favorites()->count();
+
+        if ($isOwner) {
+            $ownerRooms = $user->rooms()->get();
+            $ownerRoomIds = $ownerRooms->pluck('id');
+
+            $rentingCount = $ownerRooms->count();
+
+            $contactedCount = \App\Models\ViewingRequest::whereIn('room_id', $ownerRoomIds)->count();
+        } else {
+            $rentingCount = $user->viewingRequests()->where('status', 'confirmed')->count();
+            $contactedCount = $user->viewingRequests()->count();
+        }
 
         return response()->json([
             'user' => [
@@ -149,8 +197,11 @@ class AuthController extends Controller
                 'updated_at' => $user->updated_at?->toISOString(),
             ],
             'stats' => [
-                'saved_count' => $user->favorites()->count(),
-                'inquiries_count' => $user->viewingRequests()->count(),
+                'saved_count' => $savedCount,
+                'favorites_count' => $savedCount,
+                'renting_count' => $rentingCount,
+                'contacted_count' => $contactedCount,
+                'inquiries_count' => $contactedCount,
                 'rooms_count' => $user->rooms()->count(),
             ],
         ], 200);
@@ -161,8 +212,11 @@ class AuthController extends Controller
      */
     public function updateProfile(Request $request): JsonResponse
     {
-        /** @var User $user */
-        $user = $request->user();
+        /** @var User|null $user */
+        $user = auth('api')->user() ?? $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
 
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
@@ -238,8 +292,11 @@ class AuthController extends Controller
             'new_password' => ['required', 'string', 'min:6', 'confirmed'],
         ]);
 
-        /** @var User $user */
-        $user = $request->user();
+        /** @var User|null $user */
+        $user = auth('api')->user() ?? $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
 
         if (!Hash::check($validated['current_password'], $user->password)) {
             return response()->json([

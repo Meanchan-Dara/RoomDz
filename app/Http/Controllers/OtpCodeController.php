@@ -37,12 +37,14 @@ class OtpCodeController extends Controller
             ], 404);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $token = auth('api')->login($user);
 
         return response()->json([
             'success' => true,
             'message' => 'Login successful',
             'token' => $token,
+            'token_type' => 'bearer',
+            'expires_in' => auth('api')->factory()->getTTL() * 60,
             'user' => $user
         ]);
     }

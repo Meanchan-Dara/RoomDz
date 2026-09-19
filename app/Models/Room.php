@@ -32,12 +32,16 @@ class Room extends Model
         'listing_type',
         'total_units',
         'available_units',
+        'deposit_price',
+        'deposit_currency',
     ];
 
     protected $casts = [
         'category_id' => 'integer',
         'user_id' => 'integer',
         'price' => 'float',
+        'deposit_price' => 'float',
+        'deposit_currency' => 'string',
         'rating' => 'float',
         'reviews_count' => 'integer',
         'latitude' => 'float',
