@@ -279,11 +279,41 @@ class PaymentController extends Controller
             ]);
         }
 
+        // Check if NBC Bakong API request limit reached (100 requests)
+        if (!empty($bakongResult['limit_reached']) && empty($bakongResult['is_paid'])) {
+            $reqCount = $bakongResult['request_count'] ?? $this->bakongService->getRequestCount();
+            $reqLimit = $bakongResult['request_limit'] ?? $this->bakongService->getRequestLimit();
+
+            return response()->json([
+                'success' => false,
+                'status' => 'limit_reached',
+                'is_paid' => false,
+                'limit_reached' => true,
+                'bakong_request_count' => $reqCount,
+                'bakong_request_limit' => $reqLimit,
+                'message' => "ការស្នើសុំទៅកាន់ Bakong ដល់កម្រិតកំណត់ {$reqCount}/{$reqLimit} ដងហើយ (Bakong Request Limit Reached)។",
+                'data' => [
+                    'payment_id' => $payment->id,
+                    'bill_number' => $payment->bill_number,
+                    'status' => 'limit_reached',
+                    'bakong_request_count' => $reqCount,
+                    'bakong_request_limit' => $reqLimit,
+                    'limit_reached' => true,
+                ],
+            ], 429);
+        }
+
+        $reqCount = $bakongResult['request_count'] ?? $this->bakongService->getRequestCount();
+        $reqLimit = $bakongResult['request_limit'] ?? $this->bakongService->getRequestLimit();
+
         // Still pending
         return response()->json([
             'success' => true,
             'status' => 'pending',
             'is_paid' => false,
+            'limit_reached' => false,
+            'bakong_request_count' => $reqCount,
+            'bakong_request_limit' => $reqLimit,
             'message' => $bakongResult['message'] ?? 'Payment pending. Waiting for customer scan and confirmation.',
             'data' => [
                 'payment_id' => $payment->id,
@@ -292,6 +322,60 @@ class PaymentController extends Controller
                 'currency' => $payment->currency,
                 'expires_at' => $payment->expires_at?->toISOString(),
                 'bakong_response' => $bakongResult['message'] ?? null,
+                'bakong_request_count' => $reqCount,
+                'bakong_request_limit' => $reqLimit,
+                'limit_reached' => false,
+            ],
+        ]);
+    }
+
+    /**
+     * Get Bakong Open API usage statistics (request count and limit).
+     *
+     * GET /api/payments/bakong/usage
+     */
+    public function bakongUsage(): JsonResponse
+    {
+        $count = $this->bakongService->getRequestCount();
+        $limit = $this->bakongService->getRequestLimit();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'request_count' => $count,
+                'request_limit' => $limit,
+                'remaining' => max(0, $limit - $count),
+                'limit_reached' => ($count >= $limit),
+                'resets_at' => now()->endOfDay()->toISOString(),
+            ],
+        ]);
+    }
+
+    /**
+     * Reset Bakong API request counter or set custom count (useful for testing threshold).
+     *
+     * POST /api/payments/bakong/usage/reset
+     */
+    public function resetBakongUsage(Request $request): JsonResponse
+    {
+        $setCount = $request->input('count');
+        if (!is_null($setCount) && is_numeric($setCount)) {
+            $this->bakongService->setRequestCount((int) $setCount);
+        } else {
+            $this->bakongService->resetRequestCount();
+        }
+
+        $count = $this->bakongService->getRequestCount();
+        $limit = $this->bakongService->getRequestLimit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Bakong request counter updated successfully',
+            'data' => [
+                'request_count' => $count,
+                'request_limit' => $limit,
+                'remaining' => max(0, $limit - $count),
+                'limit_reached' => ($count >= $limit),
             ],
         ]);
     }

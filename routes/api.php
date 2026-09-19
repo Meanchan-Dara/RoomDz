@@ -135,6 +135,8 @@ Route::middleware('auth:api')->group(function () {
 // Bakong KHQR Payments
 Route::prefix('payments')->group(function () {
     Route::post('/create-qr', [PaymentController::class, 'createQr']);
+    Route::get('/bakong/usage', [PaymentController::class, 'bakongUsage']);
+    Route::post('/bakong/usage/reset', [PaymentController::class, 'resetBakongUsage']);
     Route::get('/{id}/status', [PaymentController::class, 'checkStatus']);
     Route::post('/{id}/check', [PaymentController::class, 'checkStatus']);
     Route::post('/{id}/simulate-success', [PaymentController::class, 'simulateSuccess']);

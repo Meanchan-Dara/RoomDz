@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use chillerlan\QRCode\QRCode;
@@ -172,12 +173,79 @@ class BakongService
     }
 
     /**
+     * Get maximum allowed requests for Bakong API.
+     */
+    public function getRequestLimit(): int
+    {
+        return (int) config('bakong.request_limit', 100);
+    }
+
+    /**
+     * Cache key for today's Bakong API request counter.
+     */
+    protected function getRequestCountCacheKey(): string
+    {
+        return 'bakong_api_request_count_' . now()->format('Y-m-d');
+    }
+
+    /**
+     * Get current number of requests sent to Bakong API today.
+     */
+    public function getRequestCount(): int
+    {
+        return (int) Cache::get($this->getRequestCountCacheKey(), 0);
+    }
+
+    /**
+     * Increment the Bakong API request counter by 1 and set expiration to end of day.
+     */
+    public function incrementRequestCount(): int
+    {
+        $key = $this->getRequestCountCacheKey();
+        if (!Cache::has($key)) {
+            Cache::put($key, 1, now()->endOfDay());
+            return 1;
+        }
+
+        return (int) Cache::increment($key);
+    }
+
+    /**
+     * Reset Bakong API request counter (for testing or administrative reset).
+     */
+    public function resetRequestCount(): void
+    {
+        Cache::forget($this->getRequestCountCacheKey());
+        Cache::forget('bakong_api_request_count');
+    }
+
+    /**
+     * Set a specific Bakong API request count (useful for testing threshold, e.g., set to 99).
+     */
+    public function setRequestCount(int $count): void
+    {
+        Cache::put($this->getRequestCountCacheKey(), max(0, $count), now()->endOfDay());
+    }
+
+    /**
+     * Check if Bakong API request limit has been reached.
+     */
+    public function isLimitReached(): bool
+    {
+        return $this->getRequestCount() >= $this->getRequestLimit();
+    }
+
+    /**
      * Check transaction status with NBC Bakong Open API by MD5.
+     * Increments the request counter by 1 for every call to the Bakong Open API.
      *
      * @param string $md5
      * @return array{
      *     success: bool,
      *     is_paid: bool,
+     *     limit_reached: bool,
+     *     request_count: int,
+     *     request_limit: int,
      *     message: string,
      *     data: mixed,
      *     raw: mixed
@@ -185,6 +253,30 @@ class BakongService
      */
     public function checkTransactionByMd5(string $md5): array
     {
+        $limit = $this->getRequestLimit();
+        $currentCount = $this->getRequestCount();
+
+        // If request limit is already reached (100 times), prevent further external requests
+        if ($currentCount >= $limit) {
+            Log::warning("BakongService: Request limit reached ({$currentCount}/{$limit}). Blocking outgoing request.");
+            return [
+                'success' => false,
+                'is_paid' => false,
+                'limit_reached' => true,
+                'request_count' => $currentCount,
+                'request_limit' => $limit,
+                'message' => "Bakong API request limit reached ({$currentCount}/{$limit}).",
+                'data' => null,
+                'raw' => null,
+            ];
+        }
+
+        // Count +1 every time we send a request to Bakong service
+        $newCount = $this->incrementRequestCount();
+        $limitReached = ($newCount >= $limit);
+
+        Log::info("BakongService: Request sent to Bakong Open API [{$newCount}/{$limit}] for MD5: {$md5}");
+
         $url = "{$this->baseUrl}/check_transaction_by_md5";
 
         try {
@@ -198,18 +290,21 @@ class BakongService
 
             $json = $response->json();
 
+            // Check if Bakong returns rate limit status (HTTP 429)
+            if ($response->status() === 429 || (isset($json['responseMessage']) && stripos($json['responseMessage'], 'limit') !== false)) {
+                $limitReached = true;
+            }
+
             // Bakong API response formats:
             // Success (Paid):
             // { "responseCode": 0, "responseMessage": "Success", "data": { "hash": "...", ... } }
-            // Pending / Not yet paid:
-            // { "responseCode": 1, "errorCode": 1, "responseMessage": "Transaction not found", "data": null }
-            // Unauthorized / Token invalid:
-            // { "responseCode": 1, "errorCode": 6, "responseMessage": "Unauthorized..." }
-
             if ($response->successful() && isset($json['responseCode']) && $json['responseCode'] === 0) {
                 return [
                     'success' => true,
                     'is_paid' => true,
+                    'limit_reached' => $limitReached,
+                    'request_count' => $newCount,
+                    'request_limit' => $limit,
                     'message' => $json['responseMessage'] ?? 'Transaction completed successfully',
                     'data' => $json['data'] ?? null,
                     'raw' => $json,
@@ -222,6 +317,9 @@ class BakongService
             return [
                 'success' => $response->successful(),
                 'is_paid' => false,
+                'limit_reached' => $limitReached,
+                'request_count' => $newCount,
+                'request_limit' => $limit,
                 'message' => $message,
                 'error_code' => $errorCode,
                 'data' => $json['data'] ?? null,
@@ -233,6 +331,9 @@ class BakongService
             return [
                 'success' => false,
                 'is_paid' => false,
+                'limit_reached' => $limitReached,
+                'request_count' => $newCount,
+                'request_limit' => $limit,
                 'message' => 'Failed to connect to Bakong Open API: ' . $e->getMessage(),
                 'data' => null,
                 'raw' => null,
@@ -242,12 +343,35 @@ class BakongService
 
     /**
      * Check transaction status with NBC Bakong Open API by Transaction Hash.
+     * Increments the request counter by 1 for every call to the Bakong Open API.
      *
      * @param string $hash
      * @return array
      */
     public function checkTransactionByHash(string $hash): array
     {
+        $limit = $this->getRequestLimit();
+        $currentCount = $this->getRequestCount();
+
+        if ($currentCount >= $limit) {
+            Log::warning("BakongService: Request limit reached ({$currentCount}/{$limit}). Blocking outgoing hash request.");
+            return [
+                'success' => false,
+                'is_paid' => false,
+                'limit_reached' => true,
+                'request_count' => $currentCount,
+                'request_limit' => $limit,
+                'message' => "Bakong API request limit reached ({$currentCount}/{$limit}).",
+                'data' => null,
+                'raw' => null,
+            ];
+        }
+
+        $newCount = $this->incrementRequestCount();
+        $limitReached = ($newCount >= $limit);
+
+        Log::info("BakongService: Request sent to Bakong Open API [{$newCount}/{$limit}] for Hash: {$hash}");
+
         $url = "{$this->baseUrl}/check_transaction_by_hash";
 
         try {
@@ -260,10 +384,17 @@ class BakongService
 
             $json = $response->json();
 
+            if ($response->status() === 429 || (isset($json['responseMessage']) && stripos($json['responseMessage'], 'limit') !== false)) {
+                $limitReached = true;
+            }
+
             if ($response->successful() && isset($json['responseCode']) && $json['responseCode'] === 0) {
                 return [
                     'success' => true,
                     'is_paid' => true,
+                    'limit_reached' => $limitReached,
+                    'request_count' => $newCount,
+                    'request_limit' => $limit,
                     'message' => $json['responseMessage'] ?? 'Success',
                     'data' => $json['data'] ?? null,
                 ];
@@ -272,6 +403,9 @@ class BakongService
             return [
                 'success' => $response->successful(),
                 'is_paid' => false,
+                'limit_reached' => $limitReached,
+                'request_count' => $newCount,
+                'request_limit' => $limit,
                 'message' => $json['responseMessage'] ?? 'Not found',
                 'data' => null,
             ];
@@ -281,6 +415,9 @@ class BakongService
             return [
                 'success' => false,
                 'is_paid' => false,
+                'limit_reached' => $limitReached,
+                'request_count' => $newCount,
+                'request_limit' => $limit,
                 'message' => $e->getMessage(),
                 'data' => null,
             ];

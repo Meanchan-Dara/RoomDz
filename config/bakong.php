@@ -37,4 +37,16 @@ return [
     |
     */
     'qr_expiry_minutes' => env('BAKONG_QR_EXPIRY_MINUTES', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Request Limit (Quota)
+    |--------------------------------------------------------------------------
+    |
+    | Maximum number of requests allowed to be sent to Bakong Open API before
+    | triggering the limit (Default is 100 requests).
+    |
+    */
+    'request_limit' => env('BAKONG_REQUEST_LIMIT', 100),
 ];
+
