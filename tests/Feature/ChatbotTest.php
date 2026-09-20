@@ -6,6 +6,7 @@ use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
 use App\Models\role;
+use PHPOpenSourceSaver\JWTAuth\JWTGuard;
 use Tests\TestCase;
 
 class ChatbotTest extends TestCase
@@ -46,7 +47,9 @@ class ChatbotTest extends TestCase
             'content' => 'Find me a room under $200',
         ]);
 
-        $token = auth('api')->login($user);
+        /** @var JWTGuard $guard */
+        $guard = auth('api');
+        $token = $guard->login($user);
 
         // Test GET /api/chatbot/conversations (where the LengthAwarePaginator::map bug happened)
         $response = $this->withHeader('Authorization', "Bearer {$token}")

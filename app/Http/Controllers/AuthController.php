@@ -11,9 +11,20 @@ use App\Models\role;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use PHPOpenSourceSaver\JWTAuth\JWTGuard;
 
 class AuthController extends Controller
 {
+    /**
+     * Get the authenticated JWT guard.
+     */
+    private function guard(): JWTGuard
+    {
+        /** @var JWTGuard $guard */
+        $guard = auth('api');
+        return $guard;
+    }
+
     /**
      * Upload an image file to Cloudinary, with fallback to public disk URL.
      */
@@ -61,13 +72,13 @@ class AuthController extends Controller
 
         $user->load('role');
 
-        $token = auth('api')->login($user);
+        $token = $this->guard()->login($user);
 
         return response()->json([
             'message' => 'User registered successfully',
             'token' => $token,
             'token_type' => 'bearer',
-            'expires_in' => auth('api')->factory()->getTTL() * 60,
+            'expires_in' => $this->guard()->getTTL() * 60,
             'user' => $user,
         ], 201);
     }
@@ -79,21 +90,21 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        if (!$token = auth('api')->attempt($credentials)) {
+        if (!$token = $this->guard()->attempt($credentials)) {
             return response()->json([
                 'message' => 'Invalid email or password',
             ], 401);
         }
 
         /** @var User $user */
-        $user = auth('api')->user();
+        $user = $this->guard()->user();
         $user->load('role');
 
         return response()->json([
             'message' => 'Login successful',
             'token' => $token,
             'token_type' => 'bearer',
-            'expires_in' => auth('api')->factory()->getTTL() * 60,
+            'expires_in' => $this->guard()->getTTL() * 60,
             'user' => $user,
         ], 200);
     }
@@ -101,7 +112,7 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         try {
-            auth('api')->logout();
+            $this->guard()->logout();
         } catch (\Throwable $e) {
             // In case token is already invalid/expired
         }
@@ -117,7 +128,7 @@ class AuthController extends Controller
     public function refresh(): JsonResponse
     {
         try {
-            $token = auth('api')->refresh();
+            $token = $this->guard()->refresh();
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Token could not be refreshed',
@@ -126,7 +137,7 @@ class AuthController extends Controller
         }
 
         /** @var User $user */
-        $user = auth('api')->user();
+        $user = $this->guard()->user();
         if ($user) {
             $user->load('role');
         }
@@ -135,7 +146,7 @@ class AuthController extends Controller
             'message' => 'Token refreshed successfully',
             'token' => $token,
             'token_type' => 'bearer',
-            'expires_in' => auth('api')->factory()->getTTL() * 60,
+            'expires_in' => $this->guard()->getTTL() * 60,
             'user' => $user,
         ], 200);
     }
@@ -146,7 +157,7 @@ class AuthController extends Controller
     public function profile(Request $request): JsonResponse
     {
         /** @var User|null $user */
-        $user = auth('api')->user() ?? $request->user();
+        $user = $this->guard()->user() ?? $request->user();
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
@@ -213,7 +224,7 @@ class AuthController extends Controller
     public function updateProfile(Request $request): JsonResponse
     {
         /** @var User|null $user */
-        $user = auth('api')->user() ?? $request->user();
+        $user = $this->guard()->user() ?? $request->user();
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
@@ -293,7 +304,7 @@ class AuthController extends Controller
         ]);
 
         /** @var User|null $user */
-        $user = auth('api')->user() ?? $request->user();
+        $user = $this->guard()->user() ?? $request->user();
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }

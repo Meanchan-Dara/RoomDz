@@ -7,9 +7,20 @@ use App\Models\OtpCode;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use PHPOpenSourceSaver\JWTAuth\JWTGuard;
 
 class OtpCodeController extends Controller
 {
+    /**
+     * Get the authenticated JWT guard.
+     */
+    private function guard(): JWTGuard
+    {
+        /** @var JWTGuard $guard */
+        $guard = auth('api');
+        return $guard;
+    }
+
     public function loginWithOtp(Request $request)
     {
         $request->validate([
@@ -37,14 +48,14 @@ class OtpCodeController extends Controller
             ], 404);
         }
 
-        $token = auth('api')->login($user);
+        $token = $this->guard()->login($user);
 
         return response()->json([
             'success' => true,
             'message' => 'Login successful',
             'token' => $token,
             'token_type' => 'bearer',
-            'expires_in' => auth('api')->factory()->getTTL() * 60,
+            'expires_in' => $this->guard()->getTTL() * 60,
             'user' => $user
         ]);
     }

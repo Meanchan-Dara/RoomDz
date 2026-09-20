@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use PHPOpenSourceSaver\JWTAuth\JWTGuard;
 use Tests\TestCase;
 
 class AuthOtpTest extends TestCase
@@ -168,7 +169,9 @@ class AuthOtpTest extends TestCase
             ['email' => $this->testEmail],
             ['name' => 'Meanchan Dara', 'password' => bcrypt($this->testPassword)]
         );
-        $token = auth('api')->login($user);
+        /** @var JWTGuard $guard */
+        $guard = auth('api');
+        $token = $guard->login($user);
 
         // GET /api/user
         $userResp = $this->withHeader('Authorization', "Bearer {$token}")->getJson('/api/user');

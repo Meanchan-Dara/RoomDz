@@ -33,13 +33,15 @@ class OwnerDashboardController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $totalRooms = $rooms->count();
-        $availableRooms = $rooms->filter(function ($r) {
+        $totalRooms = $rooms->sum(fn($r) => (int) ($r->total_units ?? 1));
+        $availableRooms = $rooms->sum(function ($r) {
+            if ($r->available_units !== null) {
+                return (int) $r->available_units;
+            }
             $status = strtolower($r->status ?? '');
             $isAvail = str_contains($status, 'avail') || !str_contains($status, 'occup');
-            $hasUnits = $r->available_units === null || $r->available_units > 0;
-            return $isAvail && $hasUnits;
-        })->count();
+            return $isAvail ? 1 : 0;
+        });
 
         $occupiedRooms = max(0, $totalRooms - $availableRooms);
         $occupancyRate = $totalRooms > 0 ? round(($occupiedRooms / $totalRooms) * 100) : 0;
@@ -51,13 +53,19 @@ class OwnerDashboardController extends Controller
         $confirmedRequests = ViewingRequest::whereIn('room_id', $roomIds)->where('status', 'confirmed')->count();
         $rejectedRequests = ViewingRequest::whereIn('room_id', $roomIds)->where('status', 'rejected')->count();
 
-        // Estimated revenue calculation based on occupied rooms
-        $occupiedRevenue = $rooms->filter(function ($r) {
+        // Estimated revenue calculation based on occupied rooms / units
+        $occupiedRevenue = $rooms->sum(function ($r) {
+            $totalUnits = (int) ($r->total_units ?? 1);
+            if ($r->available_units !== null) {
+                $occupied = max(0, $totalUnits - (int) $r->available_units);
+                return $occupied * (float) $r->price;
+            }
             $status = strtolower($r->status ?? '');
-            return str_contains($status, 'occup') || str_contains($status, 'rent') || ($r->available_units !== null && $r->available_units == 0);
-        })->sum(fn($r) => (float) $r->price);
+            $isOccupied = str_contains($status, 'occup') || str_contains($status, 'rent');
+            return $isOccupied ? (float) $r->price : 0;
+        });
 
-        $potentialRevenue = $rooms->sum(fn($r) => (float) $r->price);
+        $potentialRevenue = $rooms->sum(fn($r) => (int) ($r->total_units ?? 1) * (float) $r->price);
         $targetRevenue = $potentialRevenue > 0 ? $potentialRevenue : 1500.0;
 
         // Recent listings for quick access on Profile screen

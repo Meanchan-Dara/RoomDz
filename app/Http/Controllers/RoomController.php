@@ -45,7 +45,12 @@ class RoomController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Room::with(['category', 'user', 'detail']);
+        $query = Room::with([
+            'category',
+            'user',
+            'detail',
+            'payments' => fn($q) => $q->where('status', 'completed')->where('payment_type', 'booking_deposit')->latest(),
+        ]);
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -232,7 +237,12 @@ class RoomController extends Controller
      */
     public function show(string $id): RoomDetailResource
     {
-        $room = Room::with(['detail', 'category', 'user'])->findOrFail($id);
+        $room = Room::with([
+            'detail',
+            'category',
+            'user',
+            'payments' => fn($q) => $q->where('status', 'completed')->where('payment_type', 'booking_deposit')->latest(),
+        ])->findOrFail($id);
 
         return new RoomDetailResource($room);
     }
@@ -336,7 +346,7 @@ class RoomController extends Controller
                 'latitude' => $validated['latitude'] ?? null,
                 'longitude' => $validated['longitude'] ?? null,
                 'image' => $mainImageUrl,
-            ], fn ($val) => !is_null($val)));
+            ], fn($val) => !is_null($val)));
 
             $detailData = array_filter([
                 'description' => $validated['description'] ?? null,
@@ -355,7 +365,7 @@ class RoomController extends Controller
                 'contact_info' => array_key_exists('contact_info', $validated) ? $parseJsonField($validated['contact_info']) : null,
                 'latitude' => $validated['latitude'] ?? null,
                 'longitude' => $validated['longitude'] ?? null,
-            ], fn ($val) => !is_null($val));
+            ], fn($val) => !is_null($val));
 
             if (!empty($detailData)) {
                 $room->detail()->updateOrCreate(

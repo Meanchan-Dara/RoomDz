@@ -46,7 +46,7 @@ Route::post('/reset-password/{token}', [ResetPasswordController::class, 'resetPa
 
 // Auth with Google
 Route::get('/auth/google', [GoogleController::class, 'redirect']);
-Route::get('/auth/google/callback', [GoogleController::class, 'callback']);
+Route::match(['get', 'post'], '/auth/google/callback', [GoogleController::class, 'callback']);
 
 // Protected Routes
 Route::middleware('auth:api')->group(function () {
@@ -142,4 +142,3 @@ Route::prefix('payments')->group(function () {
     Route::post('/{id}/simulate-success', [PaymentController::class, 'simulateSuccess']);
     Route::get('/{id}', [PaymentController::class, 'show']);
 });
-

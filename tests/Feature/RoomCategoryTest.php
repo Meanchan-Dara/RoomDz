@@ -7,6 +7,7 @@ use App\Models\Room;
 use App\Models\User;
 use App\Models\role;
 use Illuminate\Support\Facades\Mail;
+use PHPOpenSourceSaver\JWTAuth\JWTGuard;
 use Tests\TestCase;
 
 class RoomCategoryTest extends TestCase
@@ -58,7 +59,9 @@ class RoomCategoryTest extends TestCase
         ]);
 
         // 3. Create room with details
-        $token = auth('api')->login($landlord);
+        /** @var JWTGuard $guard */
+        $guard = auth('api');
+        $token = $guard->login($landlord);
 
         $roomPayload = [
             'category_id' => $category->id,
@@ -129,7 +132,9 @@ class RoomCategoryTest extends TestCase
         ]);
 
         $category = Category::firstOrCreate(['name' => 'Standard Room', 'slug' => 'standard-room']);
-        $token = auth('api')->login($owner);
+        /** @var JWTGuard $guard */
+        $guard = auth('api');
+        $token = $guard->login($owner);
 
         // Create 1 listing representing 10 identical rooms, 8 available (2 occupied)
         $response = $this->withHeader('Authorization', "Bearer {$token}")

@@ -64,6 +64,13 @@ class PaymentController extends Controller
                 ], 404);
             }
 
+            if ($paymentType === 'booking_deposit' && in_array(strtoupper($room->status), ['BOOKED', 'RESERVED', 'OCCUPIED', 'RENTED'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'បន្ទប់នេះត្រូវបានកក់ ឬជួលរួចហើយ មិនអាចធ្វើការកក់ប្រាក់បានទេ',
+                ], 422);
+            }
+
             // Default amount & currency: if booking_deposit and deposit_price is set, use deposit_price; otherwise room price
             if (empty($amount)) {
                 if ($paymentType === 'booking_deposit' && !empty($room->deposit_price) && $room->deposit_price > 0) {
@@ -249,15 +256,13 @@ class PaymentController extends Controller
                 'payment_details' => $bakongResult['raw'] ?? $details,
             ]);
 
-            // If attached to room and is booking deposit, update room units if applicable
+            // If attached to room and is booking deposit, update room status and units
             if ($payment->room_id && $payment->room) {
                 $room = $payment->room;
                 if ($payment->payment_type === 'booking_deposit') {
+                    $room->update(['status' => 'BOOKED']);
                     if ($room->available_units !== null && $room->available_units > 0) {
                         $room->decrement('available_units');
-                        if ($room->available_units <= 0) {
-                            $room->update(['status' => 'RENTED']);
-                        }
                     }
                 }
             }
@@ -413,6 +418,17 @@ class PaymentController extends Controller
                 'acknowledgedDate' => now()->toIso8601String(),
             ],
         ]);
+
+        // If attached to room and is booking deposit, update room status and units
+        if ($payment->room_id && $payment->room) {
+            $room = $payment->room;
+            if ($payment->payment_type === 'booking_deposit') {
+                $room->update(['status' => 'BOOKED']);
+                if ($room->available_units !== null && $room->available_units > 0) {
+                    $room->decrement('available_units');
+                }
+            }
+        }
 
         return response()->json([
             'success' => true,

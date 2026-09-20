@@ -79,6 +79,12 @@ class RoomDetailResource extends JsonResource
             'name' => $this->name,
             'type' => $this->type ?? 'Private Room',
             'status' => $this->status ?? 'AVAILABLE NOW',
+            'latest_booking' => ($this->relationLoaded('payments') && $this->payments->isNotEmpty()) ? [
+                'customer_name' => $this->payments->first()->customer_name,
+                'customer_phone' => $this->payments->first()->customer_phone,
+                'amount' => (float) $this->payments->first()->amount,
+                'paid_at' => $this->payments->first()->paid_at?->toISOString(),
+            ] : null,
             'total_units' => (int) ($this->total_units ?? 1),
             'available_units' => (int) ($this->available_units ?? 1),
             'is_available' => (bool) (($this->available_units ?? 1) > 0),
