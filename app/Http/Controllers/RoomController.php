@@ -409,9 +409,36 @@ class RoomController extends Controller
             'notes' => 'nullable|string|max:1000',
         ]);
 
+        $userId = auth('api')->user()?->id ?? $request->user()?->id;
+
+        // Check if user already has an active viewing request (pending or confirmed) for this room.
+        // User can only submit again if the owner has rejected the previous request.
+        $existingQuery = ViewingRequest::where('room_id', $room->id);
+        if ($userId) {
+            $existingQuery->where(function ($q) use ($userId, $validated) {
+                $q->where('user_id', $userId)
+                    ->orWhere('phone', $validated['phone']);
+            });
+        } else {
+            $existingQuery->where('phone', $validated['phone']);
+        }
+
+        $activeRequest = $existingQuery
+            ->whereIn('status', ['pending', 'confirmed'])
+            ->first();
+
+        if ($activeRequest) {
+            $statusText = $activeRequest->status === 'confirmed' ? 'ត្រូវបានយល់ព្រមរួចរាល់' : 'កំពុងរង់ចាំការឆ្លើយតបពីម្ចាស់បន្ទប់';
+            return response()->json([
+                'success' => false,
+                'message' => "អ្នកបានស្នើសុំមើលបន្ទប់នេះរួចហើយ ($statusText)។ អ្នកអាចស្នើសុំម្តងទៀតបាន លុះត្រាតែម្ចាស់បន្ទប់បានធ្វើការបដិសេធសំណើមុនសិន។",
+                'active_request' => $activeRequest,
+            ], 422);
+        }
+
         $viewingRequest = ViewingRequest::create([
             'room_id' => $room->id,
-            'user_id' => auth('api')->user()?->id ?? $request->user()?->id,
+            'user_id' => $userId,
             'name' => $validated['name'],
             'phone' => $validated['phone'],
             'email' => $validated['email'] ?? null,
