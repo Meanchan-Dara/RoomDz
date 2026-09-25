@@ -110,6 +110,7 @@ Route::middleware(['auth:api', 'role:owner,admin'])->prefix('owner')->group(func
     Route::delete('/rooms/{id}', [OwnerRoomController::class, 'destroy']);
     Route::post('/rooms/{id}/rent-out', [OwnerRoomController::class, 'rentOut']);
     Route::post('/rooms/{id}/release-unit', [OwnerRoomController::class, 'releaseUnit']);
+    Route::put('/rooms/{id}/status', [OwnerRoomController::class, 'updateStatus']);
 
     // Owner Viewing Request Management (Viewing requests on own rooms)
     Route::get('/viewing-requests', [OwnerViewingRequestController::class, 'index']);

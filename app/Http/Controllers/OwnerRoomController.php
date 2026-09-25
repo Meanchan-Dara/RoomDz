@@ -405,6 +405,25 @@ class OwnerRoomController extends Controller
             ->findOrFail($id);
 
         if ($room->available_units < $unitsToDeduct) {
+            // If the room is already BOOKED, allow transitioning directly to OCCUPIED
+            if (in_array(strtoupper($room->status), ['BOOKED', 'RESERVED'])) {
+                $room->update([
+                    'status' => 'OCCUPIED',
+                    'available_units' => 0,
+                ]);
+
+                return response()->json([
+                    'message' => 'Successfully marked booked room as rented (occupied).',
+                    'data' => [
+                        'id' => $room->id,
+                        'total_units' => (int) $room->total_units,
+                        'available_units' => 0,
+                        'is_available' => false,
+                        'status' => 'OCCUPIED',
+                    ],
+                ]);
+            }
+
             return response()->json([
                 'message' => 'Not enough available units to rent out.',
                 'available_units' => (int) $room->available_units,
@@ -421,6 +440,41 @@ class OwnerRoomController extends Controller
 
         return response()->json([
             'message' => "Successfully rented out {$unitsToDeduct} unit(s).",
+            'data' => [
+                'id' => $room->id,
+                'total_units' => (int) $room->total_units,
+                'available_units' => (int) $room->available_units,
+                'is_available' => (bool) ($room->available_units > 0),
+                'status' => $room->status,
+            ],
+        ]);
+    }
+
+    /**
+     * Direct status update for room (AVAILABLE NOW, OCCUPIED, BOOKED).
+     */
+    public function updateStatus(Request $request, string $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'status' => 'required|string|in:AVAILABLE NOW,OCCUPIED,BOOKED',
+        ]);
+
+        $room = Room::where('user_id', $request->user()->id)->findOrFail($id);
+        $newStatus = $validated['status'];
+
+        $updateData = ['status' => $newStatus];
+        if ($newStatus === 'OCCUPIED') {
+            $updateData['available_units'] = 0;
+        } elseif ($newStatus === 'AVAILABLE NOW') {
+            if ($room->available_units <= 0) {
+                $updateData['available_units'] = max(1, (int) ($room->total_units ?: 1));
+            }
+        }
+
+        $room->update($updateData);
+
+        return response()->json([
+            'message' => "Successfully updated room status to {$newStatus}.",
             'data' => [
                 'id' => $room->id,
                 'total_units' => (int) $room->total_units,
