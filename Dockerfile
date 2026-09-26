@@ -1,4 +1,7 @@
-FROM php:8.2-apache
+FROM php:8.4-apache
+
+# Set environment
+ENV COMPOSER_ALLOW_SUPERUSER=1
 
 # Install system dependencies & PostgreSQL, MySQL, GD, Zip libraries
 RUN apt-get update && apt-get install -y \
@@ -26,19 +29,19 @@ WORKDIR /var/www/html
 # Copy application files
 COPY . .
 
-# Install PHP dependencies (production only, skipping dev dependencies)
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install PHP dependencies without dev dependencies & bypass platform check
+RUN composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-req=php
 
-# Configure Apache DocumentRoot to public
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
-    && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
-
-# Configure Directory settings for rewrite support
-RUN echo '<Directory /var/www/html/public>\n\
-    AllowOverride All\n\
-    Require all granted\n\
-</Directory>' >> /etc/apache2/apache2.conf
+# Configure Apache VirtualHost
+RUN printf '<VirtualHost *:80>\n\
+    DocumentRoot /var/www/html/public\n\
+    <Directory /var/www/html/public>\n\
+        AllowOverride All\n\
+        Require all granted\n\
+    </Directory>\n\
+    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
+    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
+</VirtualHost>\n' > /etc/apache2/sites-available/000-default.conf
 
 # Enable Apache Rewrite Module
 RUN a2enmod rewrite
