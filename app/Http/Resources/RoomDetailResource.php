@@ -24,8 +24,21 @@ class RoomDetailResource extends JsonResource
             return url(ltrim($url, '/'));
         };
 
-        $rawImages = $detail?->images ?? ($this->image ? [$this->image] : []);
-        $images = collect($rawImages)->map($formatUrl)->values()->all();
+        $allImages = collect();
+        if (!empty($this->image)) {
+            $allImages->push($this->image);
+        }
+        if (!empty($detail?->images) && is_array($detail->images)) {
+            foreach ($detail->images as $img) {
+                if (!empty($img) && !$allImages->contains($img)) {
+                    $allImages->push($img);
+                }
+            }
+        }
+        if ($allImages->isEmpty() && !empty($detail?->images)) {
+            $allImages = collect($detail->images);
+        }
+        $images = $allImages->map($formatUrl)->values()->all();
 
         $facilities = collect($detail?->facilities ?? [])->map(function ($item) {
             if (is_array($item)) {

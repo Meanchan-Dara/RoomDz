@@ -173,8 +173,12 @@ class RoomController extends Controller
             $mainImageUrl = $galleryUrls[0];
         }
 
-        if (!empty($mainImageUrl) && empty($galleryUrls)) {
-            $galleryUrls = [$mainImageUrl];
+        if (!empty($mainImageUrl)) {
+            if (empty($galleryUrls)) {
+                $galleryUrls = [$mainImageUrl];
+            } elseif (!in_array($mainImageUrl, $galleryUrls)) {
+                array_unshift($galleryUrls, $mainImageUrl);
+            }
         }
 
         $userId = auth('api')->user()?->id ?? $request->user()?->id ?? ($validated['user_id'] ?? null);
